@@ -429,66 +429,175 @@ function loadCalendarBookings() {
         where("date", "==", dateVal)
     );
 
+    // Guardar snapshots para re-render conjunto
+    let reservasSnapshot = null;
+    let blockedSnapshot = null;
+
+    function renderCalendarSlots() {
+        // Limpar todos os slots
+        document.querySelectorAll('.calendar-slot').forEach(slot => {
+            slot.innerHTML = '';
+        });
+
+        // 1. Renderizar reservas
+        if (reservasSnapshot) {
+            reservasSnapshot.forEach(docSnap => {
+                const data = docSnap.data();
+                
+                // Ignorar rejeitadas
+                if (data.status === 'Rejeitado') return;
+                
+                const timePart = data.datetime.split('T')[1];
+                const court = data.courtId;
+                const slotId = `slot-${court.replace(' ', '-')}-${timePart.replace(':', '-')}`;
+                const slotEl = document.getElementById(slotId);
+
+                if (slotEl) {
+                    const div = document.createElement('div');
+
+                    if (data.status === 'Cancelado') {
+                        // Reserva cancelada - aguarda decisão do admin
+                        div.className = 'calendar-booking bg-slot-cancelled';
+                        div.textContent = `❌ ${data.userEmail} (Cancelado)`;
+                        div.title = `Reserva cancelada - Clica para libertar ou bloquear`;
+                        div.onclick = (e) => {
+                            e.stopPropagation();
+                            showCancelledSlotActions(docSnap.id, data);
+                        };
+                    } else {
+                        const badgeClass = 
+                            data.status === 'Pendente' ? 'bg-slot-pending' :
+                            'bg-slot-approved';
+
+                        div.className = `calendar-booking ${badgeClass}`;
+                        div.textContent = `${data.userEmail} (${data.status})`;
+                        div.title = `User: ${data.userEmail}\nStatus: ${data.status}`;
+                        div.onclick = (e) => {
+                            e.stopPropagation();
+                            showBookingDetails(docSnap.id, data);
+                        };
+                    }
+                    
+                    slotEl.innerHTML = '';
+                    slotEl.appendChild(div);
+                }
+            });
+        }
+
+        // 2. Renderizar slots bloqueados (sobrepõe reservas canceladas se houver bloqueio)
+        if (blockedSnapshot) {
+            blockedSnapshot.forEach(docSnap => {
+                const data = docSnap.data();
+                const timePart = data.time;
+                const court = data.courtId;
+                const slotId = `slot-${court.replace(' ', '-')}-${timePart.replace(':', '-')}`;
+                const slotEl = document.getElementById(slotId);
+
+                if (slotEl) {
+                    const div = document.createElement('div');
+                    
+                    if (data.reason === 'Libertado pelo admin') {
+                        div.className = 'calendar-booking bg-slot-freed';
+                        div.textContent = '✅ Libertado pelo admin';
+                        div.title = `Libertado por: ${data.freedBy || 'Admin'}`;
+                        div.onclick = (e) => {
+                            e.stopPropagation();
+                            unblockSlot(docSnap.id, data);
+                        };
+                    } else {
+                        div.className = 'calendar-booking bg-slot-blocked';
+                        div.textContent = '🔒 BLOQUEADO';
+                        div.title = `Motivo: ${data.reason || 'Manutenção'}`;
+                        div.onclick = (e) => {
+                            e.stopPropagation();
+                            unblockSlot(docSnap.id, data);
+                        };
+                    }
+                    
+                    slotEl.innerHTML = '';
+                    slotEl.appendChild(div);
+                }
+            });
+        }
+    }
+
     // Listener para reservas
     onSnapshot(qReservas, (snapshot) => {
-        snapshot.forEach(docSnap => {
-            const data = docSnap.data();
-            const timePart = data.datetime.split('T')[1]; // "14:00"
-            const court = data.courtId;
-            
-            const slotId = `slot-${court.replace(' ', '-')}-${timePart.replace(':', '-')}`;
-            const slotEl = document.getElementById(slotId);
-
-            if (slotEl) {
-                const badgeClass = 
-                    data.status === 'Pendente' ? 'bg-slot-pending' :
-                    data.status === 'Aprovado' ? 'bg-slot-approved' : 
-                    'bg-slot-rejected';
-
-                const div = document.createElement('div');
-                div.className = `calendar-booking ${badgeClass}`;
-                div.textContent = `${data.userEmail} (${data.status})`;
-                div.title = `User: ${data.userEmail}\nStatus: ${data.status}`;
-                
-                // Click to manage
-                div.onclick = (e) => {
-                    e.stopPropagation(); // Prevent slot click
-                    showBookingDetails(docSnap.id, data);
-                };
-                
-                slotEl.innerHTML = '';
-                slotEl.appendChild(div);
-            }
-        });
+        reservasSnapshot = snapshot;
+        renderCalendarSlots();
     });
 
     // Listener para slots bloqueados
     onSnapshot(qBlocked, (snapshot) => {
-        snapshot.forEach(docSnap => {
-            const data = docSnap.data();
-            const timePart = data.time; // "14:00"
-            const court = data.courtId;
-            
-            const slotId = `slot-${court.replace(' ', '-')}-${timePart.replace(':', '-')}`;
-            const slotEl = document.getElementById(slotId);
-
-            if (slotEl) {
-                const div = document.createElement('div');
-                div.className = 'calendar-booking bg-slot-blocked';
-                div.textContent = '🔒 BLOQUEADO';
-                div.title = `Motivo: ${data.reason || 'Manutenção'}`;
-                
-                // Click para desbloquear
-                div.onclick = (e) => {
-                    e.stopPropagation();
-                    unblockSlot(docSnap.id, data);
-                };
-                
-                slotEl.innerHTML = '';
-                slotEl.appendChild(div);
-            }
-        });
+        blockedSnapshot = snapshot;
+        renderCalendarSlots();
     });
+}
+
+// Ações para slot com reserva cancelada
+async function showCancelledSlotActions(docId, data) {
+    const timePart = data.datetime.split('T')[1];
+    const result = await Swal.fire({
+        title: 'Reserva Cancelada',
+        html: `
+            <p><strong>Campo:</strong> ${data.courtId}</p>
+            <p><strong>Hora:</strong> ${timePart}</p>
+            <p><strong>Utilizador:</strong> ${data.userEmail}</p>
+            <p class="text-muted">O que queres fazer com este horário?</p>
+        `,
+        icon: 'question',
+        showDenyButton: true,
+        showCancelButton: true,
+        confirmButtonText: '✅ Libertar Horário',
+        denyButtonText: '🔒 Bloquear Horário',
+        cancelButtonText: 'Fechar',
+        confirmButtonColor: '#22c55e',
+        denyButtonColor: '#64748b'
+    });
+
+    if (result.isConfirmed) {
+        // Libertar - marcar reserva como libertada e remover da ocupação
+        try {
+            const adminEmail = auth.currentUser?.email || 'Admin';
+            await updateDoc(doc(db, "reservas", docId), {
+                status: 'Libertado',
+                freedBy: adminEmail,
+                freedAt: new Date()
+            });
+            Swal.fire('Libertado!', 'O horário está agora disponível para novas reservas.', 'success');
+        } catch (error) {
+            console.error('Erro ao libertar:', error);
+            Swal.fire('Erro', 'Não foi possível libertar o horário.', 'error');
+        }
+    } else if (result.isDenied) {
+        // Bloquear - criar bloqueio e marcar reserva
+        try {
+            const adminEmail = auth.currentUser?.email || 'Admin';
+            const [dateVal, timeVal] = data.datetime.split('T');
+            
+            await updateDoc(doc(db, "reservas", docId), {
+                status: 'Bloqueado',
+                blockedBy: adminEmail,
+                blockedAt: new Date()
+            });
+
+            await addDoc(collection(db, "blockedSlots"), {
+                date: dateVal,
+                time: timeVal,
+                courtId: data.courtId,
+                datetime: data.datetime,
+                blockedBy: adminEmail,
+                reason: 'Bloqueado após cancelamento',
+                createdAt: new Date(),
+                timestamp: Date.now()
+            });
+
+            Swal.fire('Bloqueado!', 'O horário foi bloqueado.', 'success');
+        } catch (error) {
+            console.error('Erro ao bloquear:', error);
+            Swal.fire('Erro', 'Não foi possível bloquear o horário.', 'error');
+        }
+    }
 }
 
 // Função para desbloquear slot

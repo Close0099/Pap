@@ -724,21 +724,39 @@
         
         async function getReservedSlots(court, date) {
             try {
+                const reserved = [];
+
+                // 1. Verificar reservas (Aprovado, Pendente e Cancelado bloqueiam o slot)
                 const reservasQuery = query(
                     collection(db, 'reservas'),
-                    where('courtId', '==', court),
-                    where('status', '!=', 'Rejeitado')
+                    where('courtId', '==', court)
                 );
                 
                 const querySnapshot = await getDocs(reservasQuery);
-                const reserved = [];
-                querySnapshot.forEach(doc => {
-                    const docDate = doc.data().datetime.split('T')[0];
-                    if (docDate === date) {
-                        const time = doc.data().datetime.split('T')[1].substring(0, 5);
+                querySnapshot.forEach(d => {
+                    const data = d.data();
+                    const docDate = data.datetime.split('T')[0];
+                    const docStatus = data.status;
+                    if (docDate === date && (docStatus === 'Aprovado' || docStatus === 'Pendente' || docStatus === 'Cancelado')) {
+                        const time = data.datetime.split('T')[1].substring(0, 5);
                         reserved.push(time);
                     }
                 });
+
+                // 2. Verificar slots bloqueados pelo admin
+                const blockedQuery = query(
+                    collection(db, 'blockedSlots'),
+                    where('date', '==', date),
+                    where('courtId', '==', court)
+                );
+                const blockedSnapshot = await getDocs(blockedQuery);
+                blockedSnapshot.forEach(d => {
+                    const data = d.data();
+                    if (data.time && !reserved.includes(data.time)) {
+                        reserved.push(data.time);
+                    }
+                });
+
                 return reserved;
             } catch (error) {
                 console.error('Erro ao buscar slots reservados:', error);

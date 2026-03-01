@@ -441,33 +441,7 @@
                             </label>
                         </div>
 
-                        <div class="mt-3 p-3 bg-dark rounded border border-secondary">
-                            <h6 class="mb-3">Verificação por Telemóvel</h6>
-                            <div class="mb-3">
-                                <label for="booking-phone" class="form-label text-secondary">Número de telefone</label>
-                                <input type="tel" class="form-control bg-dark border-secondary text-white" id="booking-phone" placeholder="+351912345678" autocomplete="tel" required>
-                                <div class="form-text text-secondary">Obrigatório para concluir a reserva.</div>
-                            </div>
 
-                            <div class="d-flex gap-2 mb-3">
-                                <button type="button" class="btn btn-outline-info flex-grow-1" id="btn-send-phone-code" onclick="sendBookingPhoneCode()">
-                                    <i class="bi bi-send"></i> Enviar Código
-                                </button>
-                            </div>
-
-                            <div class="mb-3">
-                                <label for="booking-phone-code" class="form-label text-secondary">Código recebido por SMS</label>
-                                <div class="input-group">
-                                    <input type="text" class="form-control bg-dark border-secondary text-white" id="booking-phone-code" placeholder="000000" maxlength="6" inputmode="numeric" autocomplete="one-time-code" disabled>
-                                    <button type="button" class="btn btn-outline-success" id="btn-verify-phone-code" onclick="verifyBookingPhoneCode()" disabled>
-                                        Verificar
-                                    </button>
-                                </div>
-                            </div>
-
-                            <small id="phone-verification-status" class="text-secondary d-block">Número ainda não verificado.</small>
-                            <div id="booking-phone-recaptcha" class="mt-2"></div>
-                        </div>
                     </div>
 
                     <!-- Barra de Progresso -->
@@ -511,8 +485,8 @@
     <!-- Script de Logout -->
     <script type="module">
         import { auth, db } from './js/core/firebase-config.js';
-        import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { signOut, getAuth, RecaptchaVerifier, signInWithPhoneNumber } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+        import { signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
         import { addDoc, collection, query, where, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
         
         window.logout = async () => {
@@ -606,194 +580,9 @@
 
         // Inicializar Flatpickr no modal
         let datePickerInstance = null;
-        let phoneVerificationResult = null;
-        let isPhoneVerifiedForBooking = false;
-        let verifiedBookingPhone = '';
-        let phoneRecaptchaVerifier = null;
-        let phoneAuthInstance = null;
 
-        function getPhoneAuthInstance() {
-            if (phoneAuthInstance) return phoneAuthInstance;
 
-            const phoneAppName = 'smashlab-phone-verification';
-            const firebaseConfig = auth.app?.options;
-            if (!firebaseConfig) {
-                throw new Error('Configuração Firebase não disponível para verificação por telefone.');
-            }
 
-            const phoneApp = getApps().some(app => app.name === phoneAppName)
-                ? getApp(phoneAppName)
-                : initializeApp(firebaseConfig, phoneAppName);
-
-            phoneAuthInstance = getAuth(phoneApp);
-            phoneAuthInstance.languageCode = 'pt';
-            return phoneAuthInstance;
-        }
-
-        function normalizePhoneNumber(rawPhone) {
-            const trimmed = (rawPhone || '').trim();
-            if (!trimmed) return '';
-
-            if (trimmed.startsWith('+')) {
-                return '+' + trimmed.slice(1).replace(/\D/g, '');
-            }
-
-            if (trimmed.startsWith('00')) {
-                return '+' + trimmed.slice(2).replace(/\D/g, '');
-            }
-
-            const digits = trimmed.replace(/\D/g, '');
-            if (digits.length === 9 && digits.startsWith('9')) {
-                return `+351${digits}`;
-            }
-
-            return '+' + digits;
-        }
-
-        function isValidPhoneNumber(phoneNumber) {
-            return /^\+\d{9,15}$/.test(phoneNumber);
-        }
-
-        function setPhoneVerificationStatus(message, status = 'neutral') {
-            const statusEl = document.getElementById('phone-verification-status');
-            if (!statusEl) return;
-
-            statusEl.className = 'd-block';
-            if (status === 'success') statusEl.classList.add('text-success');
-            else if (status === 'error') statusEl.classList.add('text-danger');
-            else if (status === 'warning') statusEl.classList.add('text-warning');
-            else statusEl.classList.add('text-secondary');
-
-            statusEl.textContent = message;
-        }
-
-        function updateConfirmButtonState() {
-            const confirmBtn = document.getElementById('btn-confirm-modal');
-            if (!confirmBtn) return;
-            confirmBtn.disabled = !isPhoneVerifiedForBooking;
-        }
-
-        function resetPhoneVerificationState() {
-            phoneVerificationResult = null;
-            isPhoneVerifiedForBooking = false;
-            verifiedBookingPhone = '';
-
-            const phoneInput = document.getElementById('booking-phone');
-            const codeInput = document.getElementById('booking-phone-code');
-            const verifyBtn = document.getElementById('btn-verify-phone-code');
-            const sendBtn = document.getElementById('btn-send-phone-code');
-
-            if (phoneInput) {
-                phoneInput.disabled = false;
-                phoneInput.value = '';
-            }
-            if (codeInput) {
-                codeInput.value = '';
-                codeInput.disabled = true;
-            }
-            if (verifyBtn) verifyBtn.disabled = true;
-            if (sendBtn) sendBtn.disabled = false;
-
-            setPhoneVerificationStatus('Número ainda não verificado.', 'neutral');
-            updateConfirmButtonState();
-        }
-
-        window.sendBookingPhoneCode = async () => {
-            const phoneInput = document.getElementById('booking-phone');
-            const codeInput = document.getElementById('booking-phone-code');
-            const verifyBtn = document.getElementById('btn-verify-phone-code');
-            const sendBtn = document.getElementById('btn-send-phone-code');
-
-            const normalizedPhone = normalizePhoneNumber(phoneInput?.value || '');
-            if (!isValidPhoneNumber(normalizedPhone)) {
-                setPhoneVerificationStatus('Número inválido. Exemplo: +351912345678', 'error');
-                return;
-            }
-
-            try {
-                sendBtn.disabled = true;
-                setPhoneVerificationStatus('A enviar código por SMS...', 'warning');
-                isPhoneVerifiedForBooking = false;
-                verifiedBookingPhone = '';
-                updateConfirmButtonState();
-
-                const phoneAuth = getPhoneAuthInstance();
-
-                if (!phoneRecaptchaVerifier) {
-                    phoneRecaptchaVerifier = new RecaptchaVerifier(phoneAuth, 'booking-phone-recaptcha', {
-                        size: 'invisible'
-                    });
-                }
-
-                phoneVerificationResult = await signInWithPhoneNumber(phoneAuth, normalizedPhone, phoneRecaptchaVerifier);
-
-                codeInput.disabled = false;
-                verifyBtn.disabled = false;
-                phoneInput.value = normalizedPhone;
-                setPhoneVerificationStatus('Código enviado. Introduz os 6 dígitos para verificar.', 'success');
-            } catch (error) {
-                console.error('Erro ao enviar código SMS:', error);
-                let statusMessage = 'Falha ao enviar SMS. Verifica o número e tenta novamente.';
-
-                if (error?.code === 'auth/operation-not-allowed') {
-                    statusMessage = 'Login por telefone está desativado no Firebase. Ativa em Authentication > Sign-in method > Phone.';
-                } else if (error?.code === 'auth/invalid-phone-number') {
-                    statusMessage = 'Número inválido. Usa formato internacional, por exemplo +351912345678.';
-                } else if (error?.code === 'auth/too-many-requests') {
-                    statusMessage = 'Muitas tentativas de SMS. Aguarda alguns minutos e tenta novamente.';
-                } else if (error?.code === 'auth/quota-exceeded') {
-                    statusMessage = 'Limite de SMS atingido no Firebase. Verifica quotas/faturação do projeto.';
-                } else if (error?.code === 'auth/billing-not-enabled') {
-                    statusMessage = 'Faturação não ativa no projeto Firebase. Para SMS real, ativa Billing (plano Blaze).';
-                }
-
-                setPhoneVerificationStatus(statusMessage, 'error');
-                sendBtn.disabled = false;
-            }
-        };
-
-        window.verifyBookingPhoneCode = async () => {
-            const phoneInput = document.getElementById('booking-phone');
-            const codeInput = document.getElementById('booking-phone-code');
-            const verifyBtn = document.getElementById('btn-verify-phone-code');
-
-            if (!phoneVerificationResult) {
-                setPhoneVerificationStatus('Primeiro envia o código por SMS.', 'warning');
-                return;
-            }
-
-            const code = (codeInput?.value || '').trim();
-            if (!/^\d{6}$/.test(code)) {
-                setPhoneVerificationStatus('Código inválido. Introduz os 6 dígitos.', 'error');
-                return;
-            }
-
-            try {
-                verifyBtn.disabled = true;
-                await phoneVerificationResult.confirm(code);
-
-                const normalizedPhone = normalizePhoneNumber(phoneInput?.value || '');
-                isPhoneVerifiedForBooking = true;
-                verifiedBookingPhone = normalizedPhone;
-
-                phoneInput.disabled = true;
-                codeInput.disabled = true;
-                setPhoneVerificationStatus(`Telefone verificado com sucesso: ${normalizedPhone}`, 'success');
-                updateConfirmButtonState();
-
-                const phoneAuth = getPhoneAuthInstance();
-                if (phoneAuth.currentUser) {
-                    await signOut(phoneAuth);
-                }
-            } catch (error) {
-                console.error('Erro ao verificar código SMS:', error);
-                verifyBtn.disabled = false;
-                isPhoneVerifiedForBooking = false;
-                verifiedBookingPhone = '';
-                updateConfirmButtonState();
-                setPhoneVerificationStatus('Código incorreto ou expirado. Pede um novo código.', 'error');
-            }
-        };
 
         window.openBookingModal = () => {
             const modal = new bootstrap.Modal(document.getElementById('bookingModal'));
@@ -847,29 +636,10 @@
             document.getElementById('btn-back').style.display = 'none';
             document.getElementById('btn-next').style.display = 'inline-block';
             document.getElementById('btn-confirm-modal').style.display = 'none';
-            resetPhoneVerificationState();
             updateProgress();
         };
 
-        const bookingPhoneInput = document.getElementById('booking-phone');
-        const bookingPhoneCodeInput = document.getElementById('booking-phone-code');
 
-        if (bookingPhoneInput) {
-            bookingPhoneInput.addEventListener('input', () => {
-                if (isPhoneVerifiedForBooking) {
-                    isPhoneVerifiedForBooking = false;
-                    verifiedBookingPhone = '';
-                    setPhoneVerificationStatus('Número alterado. Faz nova verificação por SMS.', 'warning');
-                    updateConfirmButtonState();
-                }
-            });
-        }
-
-        if (bookingPhoneCodeInput) {
-            bookingPhoneCodeInput.addEventListener('input', (event) => {
-                event.target.value = event.target.value.replace(/\D/g, '').slice(0, 6);
-            });
-        }
 
         window.selectCourtModal = (element) => {
             document.querySelectorAll('.court-option').forEach(c => c.classList.remove('active'));
@@ -918,10 +688,6 @@
             document.getElementById('btn-back').style.display = modalStep > 1 ? 'inline-block' : 'none';
             document.getElementById('btn-next').style.display = modalStep < 3 ? 'inline-block' : 'none';
             document.getElementById('btn-confirm-modal').style.display = modalStep === 3 ? 'inline-block' : 'none';
-            if (modalStep === 3) {
-                updateConfirmButtonState();
-            }
-            
             updateProgress();
         }
 
@@ -969,27 +735,38 @@
             try {
                 console.log(`[getReservedSlots] Buscando para ${court} no dia ${date}`);
                 
+                const reserved = [];
+
+                // 1. Verificar reservas (Aprovado, Pendente e Cancelado bloqueiam o slot)
                 const reservasQuery = query(
                     collection(db, 'reservas'),
                     where('courtId', '==', court)
                 );
                 
                 const querySnapshot = await getDocs(reservasQuery);
-                const reserved = [];
-                querySnapshot.forEach(doc => {
-                    const data = doc.data();
+                querySnapshot.forEach(d => {
+                    const data = d.data();
                     const docDate = data.datetime.split('T')[0];
                     const docStatus = data.status;
                     
-                    console.log(`[getReservedSlots] Doc: ${doc.id}, date: ${docDate}, status: ${docStatus}`);
-                    
-                    // APENAS contar como reservado se for Aprovado ou Pendente
-                    if (docDate === date && (docStatus === 'Aprovado' || docStatus === 'Pendente')) {
+                    // Aprovado, Pendente e Cancelado bloqueiam. Só Libertado e Rejeitado ficam livres.
+                    if (docDate === date && (docStatus === 'Aprovado' || docStatus === 'Pendente' || docStatus === 'Cancelado')) {
                         const time = data.datetime.split('T')[1].substring(0, 5);
                         reserved.push(time);
-                        console.log(`[getReservedSlots] ✓ Marcado como reservado: ${time}`);
-                    } else if (docDate === date) {
-                        console.log(`[getReservedSlots] ✗ Ignorado (status: ${docStatus})`);
+                    }
+                });
+
+                // 2. Verificar slots bloqueados pelo admin
+                const blockedQuery = query(
+                    collection(db, 'blockedSlots'),
+                    where('date', '==', date),
+                    where('courtId', '==', court)
+                );
+                const blockedSnapshot = await getDocs(blockedQuery);
+                blockedSnapshot.forEach(d => {
+                    const data = d.data();
+                    if (data.time && !reserved.includes(data.time)) {
+                        reserved.push(data.time);
                     }
                 });
                 
@@ -1029,11 +806,6 @@
                     throw new Error("Utilizador não autenticado. Por favor, faz login novamente.");
                 }
 
-                if (!isPhoneVerifiedForBooking || !verifiedBookingPhone) {
-                    Swal.fire('Verificação necessária', 'Verifica primeiro o número de telefone para concluir a reserva.', 'warning');
-                    return;
-                }
-
                 const recurring = document.getElementById('modal-recurring-checkbox').checked;
                 
                 // Construir datetime final
@@ -1043,9 +815,6 @@
                 await addDoc(collection(db, "reservas"), {
                     userId: auth.currentUser.uid,
                     userEmail: auth.currentUser.email,
-                    userPhone: verifiedBookingPhone,
-                    phoneVerified: true,
-                    phoneVerifiedAt: new Date(),
                     datetime: finalDateTime,
                     courtId: modalData.court,
                     price: modalData.price,
