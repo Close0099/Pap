@@ -1,0 +1,62 @@
+{
+  "name": "SmashLab - Reservas Online",
+  "short_name": "SmashLab",
+  "description": "Plataforma de reservas online para campos de padel com dashboard administrativo",
+  "start_url": "/start.html",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f172a",
+  "theme_color": "#a3e635",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%230f172a' width='192' height='192'/><circle cx='96' cy='96' r='80' fill='%23a3e635'/><text x='96' y='110' font-size='60' font-weight='bold' text-anchor='middle' fill='%230f172a' font-family='Arial'>PC</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect fill='%230f172a' width='512' height='512'/><circle cx='256' cy='256' r='220' fill='%23a3e635'/><text x='256' y='290' font-size='160' font-weight='bold' text-anchor='middle' fill='%230f172a' font-family='Arial'>PC</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["sports", "lifestyle"],
+  "screenshots": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 540 720'><rect fill='%230f172a' width='540' height='720'/><rect fill='%231e293b' y='0' width='540' height='60'/><circle cx='270' cy='30' r='15' fill='%23a3e635'/><rect fill='%230f172a' y='100' width='540' height='300'/><rect fill='%231e293b' y='100' width='540' height='50' opacity='0.5'/><rect fill='%231e293b' y='170' width='540' height='50' opacity='0.5'/><rect fill='%231e293b' y='240' width='540' height='50' opacity='0.5'/></svg>",
+      "sizes": "540x720",
+      "type": "image/svg+xml",
+      "form_factor": "narrow"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nova Reserva",
+      "short_name": "Reservar",
+      "description": "Criar uma nova reserva rapidamente",
+      "url": "/dashboard.html",
+      "icons": [
+        {
+          "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect fill='%23a3e635' width='96' height='96' rx='16'/><text x='48' y='56' font-size='32' font-weight='bold' text-anchor='middle' fill='%230f172a' font-family='Arial'>+</text></svg>",
+          "sizes": "96x96",
+          "type": "image/svg+xml"
+        }
+      ]
+    },
+    {
+      "name": "Minhas Reservas",
+      "short_name": "Reservas",
+      "description": "Ver suas reservas ativas",
+      "url": "/dashboard.html",
+      "icons": [
+        {
+          "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect fill='%23a3e635' width='96' height='96' rx='16'/><text x='48' y='56' font-size='40' font-weight='bold' text-anchor='middle' fill='%230f172a' font-family='Arial'>📅</text></svg>",
+          "sizes": "96x96",
+          "type": "image/svg+xml"
+        }
+      ]
+    }
+  ]
+}

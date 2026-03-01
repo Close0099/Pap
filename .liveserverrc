@@ -1,0 +1,7 @@
+{
+  "port": 5501,
+  "root": "/",
+  "proxy": {
+    "enable": false
+  }
+}
