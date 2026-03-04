@@ -1438,6 +1438,50 @@ small {
     background: linear-gradient(to bottom, transparent, var(--sl-bg));
 }
 
+.hero-to-content-gradient {
+    height: clamp(80px, 12vw, 150px);
+    margin-top: -2px;
+    background:
+        linear-gradient(180deg, rgba(11, 20, 17, 0.1) 0%, rgba(11, 20, 17, 0.8) 58%, rgba(15, 24, 56, 0.98) 100%);
+}
+
+.club-story-section,
+.courts-showcase-section {
+    background: #0f1838;
+    padding: 1.4rem 0 2.2rem;
+}
+
+.club-mini-point {
+    display: flex;
+    gap: 0.55rem;
+    align-items: center;
+    color: #dbeafe;
+    font-size: 0.95rem;
+}
+
+.club-mini-point i {
+    font-size: 1rem;
+}
+
+.club-info-list li {
+    padding: 0.45rem 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.club-info-list li:last-child {
+    border-bottom: 0;
+}
+
+.court-showcase-card .court-visual {
+    height: 120px;
+    border-radius: 10px;
+}
+
+.court-showcase-card .badge {
+    border-radius: 8px;
+    font-weight: 500;
+}
+
 .social-btn {
     width: 44px;
     height: 44px;
@@ -1741,6 +1785,15 @@ body.app-login-page {
     .auth-card,
     .card-custom {
         border-radius: 10px !important;
+    }
+
+    .club-story-section,
+    .courts-showcase-section {
+        padding: 0.9rem 0 1.6rem;
+    }
+
+    .court-showcase-card .court-visual {
+        height: 102px;
     }
 }
 
