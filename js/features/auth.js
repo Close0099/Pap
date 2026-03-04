@@ -100,7 +100,7 @@ onAuthStateChanged(auth, async (user) => {
     
     if (user) {
         const path = window.location.pathname;
-        const isLoginPage = path.includes('index.html') || path === '/' || path.endsWith('/');
+        const isLoginPage = path.includes('index.html') || path.includes('auth.html') || path === '/' || path.endsWith('/');
 
         if (isLoginPage) {
             try {
