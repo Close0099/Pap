@@ -7,6 +7,32 @@ const loginForm = document.querySelector('#login-form form');
 const registerForm = document.querySelector('#register-form form');
 const resetPasswordForm = document.getElementById('reset-password-form');
 
+async function redirectByUserRole(user) {
+    try {
+        let userDoc = await getDoc(doc(db, "users", user.uid));
+        let retries = 0;
+
+        while (!userDoc.exists() && retries < 3) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            userDoc = await getDoc(doc(db, "users", user.uid));
+            retries++;
+        }
+
+        if (userDoc.exists()) {
+            const data = userDoc.data();
+            if (data.isAdmin === true || data.role === 'admin') {
+                window.location.href = 'admin-dashboard.html';
+                return;
+            }
+        }
+
+        window.location.href = 'dashboard.html';
+    } catch (error) {
+        console.error("Erro ao verificar perfil:", error);
+        window.location.href = 'dashboard.html';
+    }
+}
+
 // --- REGISTO ---
 if (registerForm) {
     registerForm.addEventListener('submit', async (e) => {
@@ -46,7 +72,7 @@ if (registerForm) {
                 timer: 2000,
                 showConfirmButton: false
             });
-            // O onAuthStateChanged vai tratar do redirecionamento
+            await redirectByUserRole(user);
 
         } catch (error) {
             console.error("Erro no registo:", error);
@@ -78,8 +104,8 @@ if (loginForm) {
             btn.textContent = 'A entrar...';
             btn.disabled = true;
 
-            await signInWithEmailAndPassword(auth, email, password);
-            // O onAuthStateChanged vai tratar do redirecionamento
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            await redirectByUserRole(userCredential.user);
 
         } catch (error) {
             console.error("Erro no login:", error);
@@ -103,31 +129,7 @@ onAuthStateChanged(auth, async (user) => {
         const isLoginPage = path.includes('index.html') || path.includes('auth.html') || path === '/' || path.endsWith('/');
 
         if (isLoginPage) {
-            try {
-                // Tentar obter documento com retry (caso tenha acabado de ser criado)
-                let userDoc = await getDoc(doc(db, "users", user.uid));
-                let retries = 0;
-                
-                while (!userDoc.exists() && retries < 3) {
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                    userDoc = await getDoc(doc(db, "users", user.uid));
-                    retries++;
-                }
-                
-                if (userDoc.exists()) {
-                    const data = userDoc.data();
-                    if (data.isAdmin === true || data.role === 'admin') {
-                        window.location.href = 'admin-dashboard.html';
-                    } else {
-                        window.location.href = 'dashboard.html';
-                    }
-                } else {
-                    window.location.href = 'dashboard.html';
-                }
-            } catch (error) {
-                console.error("Erro ao verificar perfil:", error);
-                window.location.href = 'dashboard.html';
-            }
+            await redirectByUserRole(user);
         }
     }
 });
