@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmashLab App</title>
+    <meta name="theme-color" content="#0f172a">
+    <link rel="icon" type="image/png" href="img/imagem.png">
+    <link rel="stylesheet" href="css/style.css?v=20260213-loader">
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="page-loader" class="page-loader" role="status" aria-live="polite" aria-label="A carregar aplicação">
+        <div class="loader-content">
+            <div class="loader-logo" aria-hidden="true">Smash<span>Lab</span></div>
+            <div class="loader-visual" aria-hidden="true">
+                <div class="loader-ring"></div>
+                <div class="padel-ball"></div>
+                <div class="loader-particles">
+                    <span></span><span></span><span></span><span></span>
+                    <span></span><span></span><span></span><span></span>
+                </div>
+            </div>
+            <p class="loader-text">A redirecionar...</p>
+        </div>
+    </div>
+
+    <script src="./js/shared/page-loader.js?v=20260213-loader" defer></script>
+    <script>
+        // Detectar se é app mobile ou browser
+        const isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+        const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const targetUrl = (isStandalone || (window.innerWidth <= 768 && isMobileUA))
+            ? '/app-login.html'
+            : '/index.html';
+
+        // Pequeno atraso para permitir transição visual sem prejudicar UX
+        window.setTimeout(() => {
+            window.location.href = targetUrl;
+        }, 450);
+    </script>
+</body>
+</html>

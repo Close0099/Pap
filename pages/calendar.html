@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendário - Clube de Padel</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css?v=2.2">
+    
+    <style>
+        .fc {
+            background-color: #0f172a;
+            color: #e2e8f0;
+        }
+        .fc-toolbar-title {
+            color: #84cc16 !important;
+        }
+        .fc-button {
+            background-color: #334155 !important;
+            border-color: #475569 !important;
+            color: #e2e8f0 !important;
+        }
+        .fc-button:hover {
+            background-color: #84cc16 !important;
+            border-color: #84cc16 !important;
+        }
+        .fc-button-active {
+            background-color: #84cc16 !important;
+            border-color: #84cc16 !important;
+        }
+        .fc-day {
+            background-color: #1e293b;
+            border-color: #334155 !important;
+        }
+        .fc-day-today {
+            background-color: rgba(132, 204, 22, 0.1) !important;
+        }
+        .fc-event {
+            cursor: pointer;
+            border: none;
+            padding: 2px 5px;
+        }
+        .fc-event-approved {
+            background-color: #22c55e !important;
+        }
+        .fc-event-pending {
+            background-color: #eab308 !important;
+        }
+        .fc-event-rejected {
+            background-color: #ef4444 !important;
+        }
+        .fc-event-cancelled {
+            background-color: #94a3b8 !important;
+        }
+        .fc-event-focus {
+            box-shadow: 0 0 0 2px #84cc16;
+        }
+        .calendar-filters {
+            background-color: #1e293b;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body class="bg-dark text-white">
+
+    <!-- Sidebar -->
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-logo">
+                <i class="bi bi-trophy-fill text-padel"></i>
+            </div>
+            <h5 class="sidebar-title mb-0">Smash<span class="text-padel">Lab</span></h5>
+            <button class="btn-close-sidebar d-lg-none" onclick="toggleSidebar()">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        
+        <div class="sidebar-user">
+            <div class="user-avatar">
+                <i class="bi bi-person-circle fs-2"></i>
+            </div>
+            <div class="user-info">
+                <span id="user-name" class="user-name">...</span>
+            </div>
+
+            <!-- Widget Meteorologia Compacto -->
+            <div class="sidebar-weather mt-3">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center gap-2">
+                        <i id="weather-icon-sidebar" class="bi bi-cloud-sun text-info"></i>
+                        <span id="weather-temp-sidebar" class="text-white fw-bold">--°C</span>
+                    </div>
+                    <small id="weather-desc-sidebar" class="text-secondary">A carregar...</small>
+                </div>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <a href="dashboard.html?action=new-booking" class="sidebar-link">
+                <i class="bi bi-calendar-plus"></i>
+                <span>Nova Reserva</span>
+            </a>
+            <a href="dashboard.html?section=minhas-reservas" class="sidebar-link">
+                <i class="bi bi-calendar-check"></i>
+                <span>Minhas Reservas</span>
+            </a>
+            <a href="calendar.html" class="sidebar-link active">
+                <i class="bi bi-calendar3"></i>
+                <span>Calendário</span>
+            </a>
+            <a href="dashboard.html?section=user-stats" class="sidebar-link">
+                <i class="bi bi-bar-chart-fill"></i>
+                <span>Minhas Estatísticas</span>
+            </a>
+            <a href="profile.html" class="sidebar-link">
+                <i class="bi bi-person"></i>
+                <span>Perfil</span>
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <button onclick="logout()" class="sidebar-link text-danger w-100 border-0 bg-transparent">
+                <i class="bi bi-box-arrow-right"></i>
+                <span>Sair</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Mobile Toggle -->
+    <button class="btn-toggle-sidebar d-lg-none" onclick="toggleSidebar()">
+        <i class="bi bi-list"></i>
+    </button>
+
+    <!-- Conteúdo Principal -->
+    <div class="main-content">
+        <div class="container-fluid p-4">
+
+        <!-- Filtros -->
+        <div class="calendar-filters">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label small">Filtrar por Campo:</label>
+                    <select class="form-select bg-dark border-secondary text-white" id="filter-court">
+                        <option value="">Todos os Campos</option>
+                        <option value="Campo 1">Campo 1</option>
+                        <option value="Campo 2">Campo 2</option>
+                        <option value="Campo 3">Campo 3</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small">Filtrar por Status:</label>
+                    <select class="form-select bg-dark border-secondary text-white" id="filter-status">
+                        <option value="">Todos os Status</option>
+                        <option value="approved">Aprovado</option>
+                        <option value="pending">Pendente</option>
+                        <option value="rejected">Rejeitado</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small">Visualização:</label>
+                    <select class="form-select bg-dark border-secondary text-white" id="view-mode">
+                        <option value="dayGridMonth">Mensal</option>
+                        <option value="timeGridWeek">Semanal</option>
+                        <option value="timeGridDay">Diário</option>
+                        <option value="listWeek">Lista</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="show-only-mine" checked>
+                        <label class="form-check-label small" for="show-only-mine">
+                            Apenas Minhas Reservas
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Legenda -->
+        <div class="d-flex align-items-center gap-3 mb-3 small">
+            <span class="badge" style="background:#22c55e">Aprovado</span>
+            <span class="badge" style="background:#eab308">Pendente</span>
+            <span class="badge" style="background:#ef4444">Rejeitado</span>
+        </div>
+
+        <!-- Loading -->
+        <div id="calendar-loading" class="text-secondary mb-3" style="display:none">
+            <i class="bi bi-arrow-repeat me-2"></i>A carregar eventos...
+        </div>
+
+        <!-- Calendário -->
+        <div id="calendar"></div>
+    </div>
+    </div>
+
+    <!-- Modal: Detalhes da Reserva -->
+    <div class="modal fade" id="eventModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark border-secondary text-white">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title">Detalhes da Reserva</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="event-details">
+                    <!-- Conteúdo dinâmico -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js'></script>
+    <script type="module" src="js/features/calendar.js"></script>
+
+    <!-- Sidebar Script -->
+    <script type="module">
+        import { auth, db } from './js/core/firebase-config.js';
+        import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        // Sidebar Actions
+        window.logout = async () => {
+            try {
+                await signOut(auth);
+                window.location.href = 'index.html';
+            } catch (error) {
+                console.error("Erro ao sair:", error);
+            }
+        };
+
+        window.toggleSidebar = () => {
+             document.getElementById('sidebar').classList.toggle('active');
+        };
+
+        // Populate Sidebar User Name
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                try {
+                     const docSnap = await getDoc(doc(db, "users", user.uid));
+                     const nameEl = document.getElementById('user-name'); // ID in sidebar is user-name
+                     if (nameEl) {
+                        if (docSnap.exists()) {
+                             nameEl.textContent = docSnap.data().name;
+                        } else {
+                             nameEl.textContent = user.email.split('@')[0];
+                        }
+                     }
+                } catch (e) {
+                     console.error("Erro sidebar:", e);
+                }
+            }
+        });
+    </script>
+</body>
+</html>

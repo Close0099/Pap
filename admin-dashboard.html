@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="pt-br" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Painel Administrativo - Gerenciar reservas, estatísticas e campos de padel">
+    <meta name="keywords" content="admin, dashboard, padel, estatísticas">
+    <meta name="theme-color" content="#0f172a">
+    
+    <!-- Open Graph Tags -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Admin Dashboard - SmashLab">
+    <meta property="og:description" content="Painel administrativo para gestão de reservas">
+    
+    <title>Admin Dashboard - SmashLab</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="img/imagem.png">
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css?v=2.2">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    <!-- Service Worker -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').catch(err => console.log('SW registration failed:', err));
+        }
+    </script>
+</head>
+<body>
+    <div class="d-flex">
+        <!-- Sidebar -->
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <i class="bi bi-shield-lock-fill text-padel"></i>
+                </div>
+                <h5 class="sidebar-title mb-0">Smash<span class="text-padel">Lab</span> <span class="badge bg-padel ms-1" style="font-size: 0.5rem; vertical-align: top;">ADMIN</span></h5>
+                <button class="btn-close-sidebar d-lg-none" onclick="toggleSidebar()">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <a href="#" class="sidebar-link active" onclick="showAdminSection('stats', this)">
+                    <i class="bi bi-bar-chart-fill"></i>
+                    <span>Estatísticas</span>
+                </a>
+                <a href="#" class="sidebar-link" onclick="showAdminSection('map', this)">
+                    <i class="bi bi-calendar-week"></i>
+                    <span>Mapa de Ocupação</span>
+                </a>
+                <a href="#" class="sidebar-link" onclick="showAdminSection('bookings', this)">
+                    <i class="bi bi-journal-check"></i>
+                    <span>Gestão de Reservas</span>
+                </a>
+                <a href="#" class="sidebar-link" onclick="showAdminSection('cancellations', this)">
+                    <i class="bi bi-x-circle"></i>
+                    <span>Marcações Canceladas</span>
+                    <span id="cancellation-badge" class="badge bg-danger ms-2" style="display: none;">0</span>
+                </a>
+                <a href="user-management.html" class="sidebar-link">
+                    <i class="bi bi-people-fill"></i>
+                    <span>Utilizadores</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <a href="#" onclick="logout()" class="sidebar-link text-danger">
+                    <i class="bi bi-box-arrow-right"></i>
+                    <span>Sair</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Conteúdo Principal -->
+        <div class="main-content w-100">
+            <!-- Mobile Toggle -->
+            <div class="d-lg-none d-flex justify-content-between align-items-center mb-4 px-3 pt-3">
+                <h5 class="text-white mb-0">Admin Dashboard</h5>
+                <button class="btn btn-dark" onclick="toggleSidebar()">
+                    <i class="bi bi-list fs-4"></i>
+                </button>
+            </div>
+
+            <div class="container-fluid p-4">
+        
+        <!-- Secção de Estatísticas -->
+        <section id="sec-stats">
+            <h3 class="mb-4 text-white">Dashboard Overview</h3>
+            <div class="row mb-5 g-4">
+            <div class="col-md-3 col-sm-6">
+                <div class="stat-card">
+                    <div class="stat-icon bg-success">
+                        <i class="bi bi-check-circle-fill"></i>
+                    </div>
+                    <div class="stat-content">
+                        <h6 class="text-secondary mb-1">Aprovadas</h6>
+                        <h3 class="text-white mb-0" id="stat-approved">0</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <div class="stat-card">
+                    <div class="stat-icon bg-warning">
+                        <i class="bi bi-hourglass-split"></i>
+                    </div>
+                    <div class="stat-content">
+                        <h6 class="text-secondary mb-1">Pendentes</h6>
+                        <h3 class="text-white mb-0" id="stat-pending">0</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <div class="stat-card">
+                    <div class="stat-icon bg-danger">
+                        <i class="bi bi-x-circle-fill"></i>
+                    </div>
+                    <div class="stat-content">
+                        <h6 class="text-secondary mb-1">Recusadas</h6>
+                        <h3 class="text-white mb-0" id="stat-rejected">0</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <div class="stat-card">
+                    <div class="stat-icon bg-info">
+                        <i class="bi bi-currency-euro"></i>
+                    </div>
+                    <div class="stat-content">
+                        <h6 class="text-secondary mb-1">Receita Estimada</h6>
+                        <h3 class="text-padel mb-0" id="stat-revenue">0€</h3>
+                    </div>
+                </div>
+            </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="row g-4 mb-5">
+                <div class="col-lg-8">
+                    <div class="card bg-dark border-secondary h-100">
+                        <div class="card-header border-secondary">
+                            <h5 class="card-title text-white mb-0">Evolução de Receita & Reservas</h5>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="revenueChart" style="max-height: 300px;"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card bg-dark border-secondary h-100">
+                        <div class="card-header border-secondary">
+                            <h5 class="card-title text-white mb-0">Distribuição por Campo</h5>
+                        </div>
+                        <div class="card-body d-flex align-items-center justify-content-center">
+                            <canvas id="courtsChart" style="max-height: 250px;"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Secção de Calendário Visual -->
+        <section id="sec-map" style="display: none;">
+        <div class="row mb-5">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center mb-4 border-bottom border-secondary pb-2">
+                    <h3 class="text-white mb-0">
+                        <i class="bi bi-calendar-week text-info"></i> Mapa de Ocupação
+                    </h3>
+                    <div class="d-flex gap-2">
+                        <button id="prev-day" class="btn btn-outline-secondary btn-sm"><i class="bi bi-chevron-left"></i></button>
+                        <input type="date" id="admin-date-picker" class="form-control form-control-sm bg-dark text-white border-secondary" style="width: 150px;">
+                        <button id="next-day" class="btn btn-outline-secondary btn-sm"><i class="bi bi-chevron-right"></i></button>
+                    </div>
+                </div>
+
+                <div class="card card-custom p-3 overflow-auto">
+                    <!-- Legenda -->
+                    <div class="d-flex flex-wrap gap-3 mb-3 small">
+                        <span class="d-flex align-items-center gap-1"><span class="badge bg-success rounded-circle p-1"> </span> Aprovado</span>
+                        <span class="d-flex align-items-center gap-1"><span class="badge bg-warning text-dark rounded-circle p-1"> </span> Pendente</span>
+                        <span class="d-flex align-items-center gap-1"><span class="badge rounded-circle p-1" style="background-color: #ef4444;"> </span> Cancelado</span>
+                        <span class="d-flex align-items-center gap-1"><span class="badge rounded-circle p-1" style="background-color: #64748b;"> </span> Bloqueado</span>
+                        <span class="d-flex align-items-center gap-1"><span class="badge rounded-circle p-1" style="background-color: #06b6d4;"> </span> Libertado</span>
+                    </div>
+
+                    <!-- Grelha do Calendário -->
+                    <div id="calendar-grid" class="calendar-grid">
+                        <!-- Cabeçalho -->
+                        <div class="calendar-header-cell"></div> <!-- Canto vazio -->
+                        <div class="calendar-header-cell text-center fw-bold text-white">Campo 1 <span class="badge bg-secondary">Indoor</span></div>
+                        <div class="calendar-header-cell text-center fw-bold text-white">Campo 2 <span class="badge bg-secondary">Indoor</span></div>
+                        <div class="calendar-header-cell text-center fw-bold text-white">Campo 3 <span class="badge bg-success">Outdoor</span></div>
+
+                        <!-- As linhas de horas serão geradas via JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+        </section>
+
+        <!-- Secção de Pendentes -->
+        <section id="sec-bookings" style="display: none;">
+        <div class="row mb-5">
+            <div class="col-12">
+                <h3 class="mb-4 text-white border-bottom border-secondary pb-2">
+                    <i class="bi bi-hourglass-split text-warning"></i> Pedidos Pendentes
+                </h3>
+
+                <!-- Filtros Avançados -->
+                <div class="filter-card">
+                    <div class="filter-group">
+                        <div style="flex: 1; min-width: 150px;">
+                            <label for="filter-court" class="filter-label">Campo</label>
+                            <select id="filter-court" class="form-select form-select-sm bg-dark text-white border-secondary">
+                                <option value="">Todos os Campos</option>
+                                <option value="Campo 1">Campo 1 (Indoor)</option>
+                                <option value="Campo 2">Campo 2 (Indoor)</option>
+                                <option value="Campo 3">Campo 3 (Outdoor)</option>
+                            </select>
+                        </div>
+                        <div style="flex: 1; min-width: 150px;">
+                            <label for="filter-status" class="filter-label">Status</label>
+                            <select id="filter-status" class="form-select form-select-sm bg-dark text-white border-secondary">
+                                <option value="">Todos</option>
+                                <option value="Pendente">Pendente</option>
+                                <option value="Aprovado">Aprovado</option>
+                                <option value="Recusado">Recusado</option>
+                                <option value="Cancelado">Cancelado</option>
+                            </select>
+                        </div>
+                        <div style="flex: 1; min-width: 150px;">
+                            <label for="filter-date-from" class="filter-label">Data (De)</label>
+                            <input type="date" id="filter-date-from" class="form-control form-control-sm bg-dark text-white border-secondary">
+                        </div>
+                        <div style="flex: 1; min-width: 150px;">
+                            <label for="filter-date-to" class="filter-label">Data (Até)</label>
+                            <input type="date" id="filter-date-to" class="form-control form-control-sm bg-dark text-white border-secondary">
+                        </div>
+                        <div style="flex: 0.8;">
+                            <label class="filter-label">&nbsp;</label>
+                            <button type="button" id="btn-clear-filters" class="btn btn-outline-secondary btn-sm w-100">
+                                <i class="bi bi-arrow-counterclockwise"></i> Limpar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="pending-list" class="row g-4">
+                    <!-- Os cartões de reserva pendente entram aqui -->
+                    <div class="col-12 text-center text-secondary py-5">
+                        <div class="spinner-border text-padel" role="status"></div>
+                        <p class="mt-2">A carregar pedidos...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Secção de Histórico -->
+        <div class="row">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center mb-4 border-bottom border-secondary pb-2">
+                    <h3 class="text-white mb-0">
+                        <i class="bi bi-clock-history text-secondary"></i> Histórico Recente
+                    </h3>
+                    <div class="d-flex gap-2">
+                        <button type="button" id="btn-export-csv" class="btn btn-outline-padel btn-sm" title="Exportar em CSV">
+                            <i class="bi bi-file-earmark-spreadsheet"></i> CSV
+                        </button>
+                        <button type="button" id="btn-export-json" class="btn btn-outline-padel btn-sm" title="Exportar em JSON">
+                            <i class="bi bi-file-code"></i> JSON
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="card card-custom p-0 overflow-hidden">
+                    <div class="table-responsive">
+                        <table class="table table-dark table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="p-3">Data/Hora Reserva</th>
+                                    <th class="p-3">Campo</th>
+                                    <th class="p-3">Utilizador</th>
+                                    <th class="p-3">Estado</th>
+                                    <th class="p-3">Alterado Por</th>
+                                    <th class="p-3">Data Alteração</th>
+                                </tr>
+                            </thead>
+                            <tbody id="history-list">
+                                <!-- Linhas do histórico entram aqui -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        </section>
+
+        <!-- Secção de Marcações Canceladas -->
+        <section id="sec-cancellations" style="display: none;">
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="d-flex justify-content-between align-items-center mb-4 border-bottom border-secondary pb-2">
+                        <h3 class="text-white mb-0">
+                            <i class="bi bi-x-circle text-danger"></i> Marcações Canceladas pelos Utilizadores
+                        </h3>
+                        <div>
+                            <span class="badge bg-warning text-dark">
+                                <i class="bi bi-clock-history"></i> <span id="pending-cancellations-count">0</span> Pendentes
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-info bg-opacity-10 border border-info">
+                        <i class="bi bi-info-circle-fill"></i>
+                        <strong>Instruções:</strong> Quando um utilizador cancela uma marcação, podes decidir se o horário fica livre para novas reservas ou se manténs bloqueado (ex: manutenção, evento privado).
+                    </div>
+
+                    <div id="cancellations-list" class="row g-4">
+                        <!-- Os cartões de cancelamentos entram aqui -->
+                        <div class="col-12 text-center text-secondary py-5">
+                            <div class="spinner-border text-padel" role="status"></div>
+                            <p class="mt-2">A carregar cancelamentos...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Histórico de Decisões -->
+            <div class="row mt-5">
+                <div class="col-12">
+                    <div class="d-flex justify-content-between align-items-center mb-4 border-bottom border-secondary pb-2">
+                        <h3 class="text-white mb-0">
+                            <i class="bi bi-check-circle text-success"></i> Histórico de Decisões
+                        </h3>
+                    </div>
+                    
+                    <div class="card card-custom p-0 overflow-hidden">
+                        <div class="table-responsive">
+                            <table class="table table-dark table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th class="p-3">Data/Hora Reserva</th>
+                                        <th class="p-3">Campo</th>
+                                        <th class="p-3">Utilizador</th>
+                                        <th class="p-3">Cancelado em</th>
+                                        <th class="p-3">Decisão</th>
+                                        <th class="p-3">Processado em</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="cancellations-history-list">
+                                    <!-- Linhas do histórico entram aqui -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+            </div> <!-- End Container Fluid -->
+        </div> <!-- End Main Content -->
+    </div> <!-- End Flex Wrapper -->
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- Notifications -->
+    <script src="./js/shared/notifications.js"></script>
+    <!-- Export System -->
+    <script src="./js/shared/export-system.js"></script>
+    <!-- EmailJS -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+    <script type="text/javascript">
+        (function() {
+            // Substitua pela sua Public Key do EmailJS
+            emailjs.init("qXNUUoi-wi1UkoHpE");
+        })();
+    </script>
+
+    <!-- Lógica do Admin -->
+    <script type="module" src="./js/features/admin-dashboard.js"></script>
+    
+    <script>
+        // UI Logic
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('active');
+        }
+
+        function showAdminSection(sectionId, element) {
+            // Hide all sections
+            document.getElementById('sec-stats').style.display = 'none';
+            document.getElementById('sec-map').style.display = 'none';
+            document.getElementById('sec-bookings').style.display = 'none';
+            document.getElementById('sec-cancellations').style.display = 'none';
+
+            // Show selected
+            document.getElementById('sec-' + sectionId).style.display = 'block';
+
+            // Update Active Link
+            if (element) {
+                document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+                element.classList.add('active');
+            }
+
+            // Mobile: close sidebar
+            if (window.innerWidth < 992) {
+                document.getElementById('sidebar').classList.remove('active');
+            }
+        }
+
+        // Carregar secção correta via URL
+        document.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const section = params.get('section');
+            if (section) {
+                const link = document.querySelector(`.sidebar-link[onclick*="'${section}'"]`);
+                if (link) showAdminSection(section, link);
+            }
+        });
+    </script>
+
+    <!-- Script de Logout -->
+    <script type="module">
+        import { auth } from './js/core/firebase-config.js';
+        import { signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        
+        window.logout = async () => {
+            try {
+                await signOut(auth);
+                window.location.href = 'index.html';
+            } catch (error) {
+                console.error("Erro ao sair:", error);
+            }
+        };
+    </script>
+</body>
+</html>

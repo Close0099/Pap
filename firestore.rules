@@ -1,0 +1,108 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Função auxiliar para verificar se é admin
+    function isAdmin() {
+      return request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+    
+    // Coleção de Utilizadores
+    match /users/{userId} {
+      // Qualquer utilizador autenticado pode ler (necessário para login por código)
+      allow read: if request.auth != null;
+      
+      // Admin pode listar todos os utilizadores (importante para listeners)
+      allow list: if isAdmin() || request.auth != null;
+      
+      // Atualização controlada para campos de sessão da app
+      allow update: if request.auth != null &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['appLoginCode', 'appLoginCodeUsed', 'appSessionToken', 'appSessionExpiresAt', 'lastAppLogin']) &&
+        request.resource.data.isAdmin == resource.data.isAdmin &&
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.email == resource.data.email;
+      
+      // Utilizador pode criar sua própria conta (auto-registo)
+      allow create: if request.auth != null && 
+        request.auth.uid == userId &&
+        request.resource.data.isAdmin == false && // Força não-admin
+        request.resource.data.role == "player"; // Força role "player"
+      
+      // Apenas admin pode apagar ou fazer alterações privilegiadas
+      allow delete, write: if isAdmin();
+    }
+    
+    // Coleção de Reservas
+    match /reservas/{reservaId} {
+      // Qualquer utilizador autenticado pode ler (para verificar disponibilidade)
+      allow read: if request.auth != null;
+      
+      // Admin pode ler todas as reservas
+      allow read: if isAdmin();
+      
+      // Admin pode listar todas as reservas (importante para listeners)
+      allow list: if isAdmin();
+      
+      // Qualquer utilizador autenticado pode criar (mas apenas com seu próprio userId)
+      allow create: if request.auth != null && 
+        request.resource.data.userId == request.auth.uid;
+      
+      // Utilizador pode atualizar/apagar suas próprias reservas ou admin pode fazer qualquer coisa
+      allow update, delete: if request.auth != null && 
+        (resource.data.userId == request.auth.uid || isAdmin());
+    }
+    
+    // Coleção de Histórico (apenas Admin)
+    match /historico/{document=**} {
+      allow read, write: if isAdmin();
+    }
+    
+    // Coleção de Horários Bloqueados (apenas Admin)
+    match /blockedSlots/{slotId} {
+      // Qualquer utilizador pode ler (para ver disponibilidade)
+      allow read: if request.auth != null;
+      
+      // Apenas Admin pode criar, atualizar ou apagar
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // Coleção de Mensagens (Admin → Utilizador)
+    match /messages/{messageId} {
+      // Utilizador autenticado pode ler mensagens (necessário para app)
+      allow read: if request.auth != null;
+      
+      // Admin pode ler todas as mensagens
+      allow read: if isAdmin();
+      
+      // Utilizador pode atualizar APENAS o campo 'read' (não pode mudar conteúdo)
+      allow update: if request.auth != null && 
+        request.resource.data.title == resource.data.title &&
+        request.resource.data.content == resource.data.content &&
+        request.resource.data.userId == resource.data.userId;
+      
+      // Apenas Admin pode criar e apagar mensagens (com validação de dados)
+      allow create: if isAdmin() &&
+        request.resource.data.title.size() <= 100 && // Máximo 100 caracteres
+        request.resource.data.content.size() <= 2000 && // Máximo 2000 caracteres
+        request.resource.data.keys().hasAll(['userId', 'title', 'content', 'from', 'fromEmail', 'read', 'createdAt', 'timestamp']);
+      
+      allow delete: if isAdmin();
+    }
+    
+    // Coleção de Notificações de Cancelamento
+    match /cancellationNotifications/{notificationId} {
+      // Utilizadores podem criar notificações quando cancelam suas próprias reservas
+      allow create: if request.auth != null && 
+        request.resource.data.userId == request.auth.uid;
+      
+      // Admin pode ler e atualizar todas as notificações
+      allow read, list: if isAdmin();
+      allow update: if isAdmin();
+      
+      // Admin pode apagar notificações antigas
+      allow delete: if isAdmin();
+    }
+  }
+}

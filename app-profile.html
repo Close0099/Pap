@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="pt-br" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Perfil - SmashLab App">
+    <meta name="theme-color" content="#0f172a">
+    
+    <title>Perfil - SmashLab App</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="img/imagem.png">
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css?v=20260213-loader">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+</head>
+<body>
+
+    <!-- Loading Screen -->
+    <div id="page-loader" class="page-loader" role="status" aria-live="polite" aria-label="A carregar aplicação">
+        <div class="loader-content">
+            <div class="loader-logo" aria-hidden="true">Smash<span>Lab</span></div>
+            <div class="loader-visual" aria-hidden="true">
+                <div class="loader-ring"></div>
+                <div class="padel-ball"></div>
+                <div class="loader-particles">
+                    <span></span><span></span><span></span><span></span>
+                    <span></span><span></span><span></span><span></span>
+                </div>
+            </div>
+            <p class="loader-text">A carregar perfil...</p>
+        </div>
+    </div>
+
+    <!-- Navbar -->
+    <nav class="navbar navbar-dark bg-dark border-bottom border-secondary">
+        <div class="container-fluid">
+            <a href="app-dashboard.html" class="navbar-brand mb-0 h1">
+                <i class="bi bi-arrow-left"></i> Voltar
+            </a>
+            <span class="h6 mb-0">Perfil</span>
+            <button class="btn btn-outline-danger btn-sm" onclick="logout()">
+                <i class="bi bi-box-arrow-right"></i>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container-fluid p-4">
+        <div id="profile-container">
+            <div class="text-center py-4">
+                <div class="spinner-border text-padel" role="status"></div>
+                <p class="mt-2 text-secondary">A carregar perfil...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Notifications -->
+    <script src="js/shared/notifications.js"></script>
+
+    <!-- Loader -->
+    <script src="./js/shared/page-loader.js?v=20260213-loader" defer></script>
+
+    <!-- App Profile Logic -->
+    <script type="module">
+        import { checkAppSession, clearAppSession } from './js/features/app-auth.js';
+        import { db } from './js/core/firebase-config.js';
+        import { collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const container = document.getElementById('profile-container');
+
+        async function loadProfile() {
+            const session = await checkAppSession();
+
+            if (!session) {
+                window.location.href = 'app-login.html';
+                return;
+            }
+
+            try {
+                // Contar reservas
+                const reservasRef = collection(db, 'reservas');
+                const reservasQuery = query(reservasRef, where('userId', '==', session.id));
+                const reservasSnapshot = await getDocs(reservasQuery);
+                const totalReservas = reservasSnapshot.size;
+
+                // Contar mensagens não lidas
+                const messagesRef = collection(db, 'messages');
+                const messagesQuery = query(
+                    messagesRef,
+                    where('userId', '==', session.id),
+                    where('read', '==', false)
+                );
+                const messagesSnapshot = await getDocs(messagesQuery);
+                const unreadMessages = messagesSnapshot.size;
+
+                const createdDate = session.createdAt?.seconds 
+                    ? new Date(session.createdAt.seconds * 1000).toLocaleDateString('pt-PT')
+                    : '-';
+
+                const html = `
+                    <div class="row g-3">
+                        <!-- Info Pessoal -->
+                        <div class="col-12">
+                            <div class="card card-custom">
+                                <div class="card-body">
+                                    <h5 class="card-title mb-4">👤 Informações Pessoais</h5>
+                                    <div class="row g-3">
+                                        <div class="col-12">
+                                            <small class="text-secondary">Nome</small>
+                                            <p class="text-white fw-bold">${session.name || '-'}</p>
+                                        </div>
+                                        <div class="col-12">
+                                            <small class="text-secondary">Email</small>
+                                            <p class="text-white fw-bold">${session.email || '-'}</p>
+                                        </div>
+                                        <div class="col-12">
+                                            <small class="text-secondary">Membro Desde</small>
+                                            <p class="text-white fw-bold">${createdDate}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Estatísticas -->
+                        <div class="col-12">
+                            <div class="card card-custom">
+                                <div class="card-body">
+                                    <h5 class="card-title mb-4">📊 Estatísticas</h5>
+                                    <div class="row text-center">
+                                        <div class="col-6">
+                                            <h3 class="text-padel fw-bold">${totalReservas}</h3>
+                                            <small class="text-secondary">Reservas</small>
+                                        </div>
+                                        <div class="col-6">
+                                            <h3 class="text-info fw-bold">${unreadMessages}</h3>
+                                            <small class="text-secondary">Mensagens não lidas</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Ações -->
+                        <div class="col-12">
+                            <button class="btn btn-outline-danger w-100" onclick="logout()">
+                                <i class="bi bi-box-arrow-right"></i> Sair
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                container.innerHTML = html;
+
+            } catch (error) {
+                console.error('Erro ao carregar perfil:', error);
+                container.innerHTML = `
+                    <div class="text-center py-5">
+                        <p class="text-danger">❌ Erro ao carregar perfil</p>
+                    </div>
+                `;
+            }
+        }
+
+        window.logout = async () => {
+            clearAppSession();
+            window.location.href = 'app-login.html';
+        };
+
+        // Carregar ao iniciar
+        loadProfile();
+    </script>
+
+</body>
+</html>

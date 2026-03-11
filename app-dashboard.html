@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="pt-br" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Dashboard da App Mobile - SmashLab">
+    <meta name="theme-color" content="#0f172a">
+    
+    <title>SmashLab - Dashboard App</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="img/imagem.png">
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css?v=20260213-loader">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+</head>
+<body>
+
+    <!-- Loading Screen -->
+    <div id="page-loader" class="page-loader" role="status" aria-live="polite" aria-label="A carregar aplicação">
+        <div class="loader-content">
+            <div class="loader-logo" aria-hidden="true">Smash<span>Lab</span></div>
+            <div class="loader-visual" aria-hidden="true">
+                <div class="loader-ring"></div>
+                <div class="padel-ball"></div>
+                <div class="loader-particles">
+                    <span></span><span></span><span></span><span></span>
+                    <span></span><span></span><span></span><span></span>
+                </div>
+            </div>
+            <p class="loader-text">A carregar o teu dashboard...</p>
+        </div>
+    </div>
+
+    <!-- Navbar -->
+    <nav class="navbar navbar-dark bg-dark border-bottom border-secondary">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">
+                <i class="bi bi-shield-lock-fill text-padel"></i> Smash<span class="text-padel">Lab</span>
+            </span>
+            <button class="btn btn-outline-danger btn-sm" onclick="logout()">
+                <i class="bi bi-box-arrow-right"></i> Sair
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container-fluid p-4">
+        <div class="row">
+            <!-- User Info -->
+            <div class="col-12 mb-4">
+                <div class="card card-custom">
+                    <div class="card-body">
+                        <h5 class="card-title mb-0">
+                            👤 <span id="user-name">Carregando...</span>
+                        </h5>
+                        <small class="text-secondary" id="user-email">-</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Menu Rápido -->
+            <div class="col-12">
+                <h6 class="text-secondary mb-3">Menu</h6>
+                <div class="row g-3">
+                    <div class="col-6 col-md-4">
+                        <button class="btn btn-outline-primary w-100 py-3" onclick="navigateTo('app-reservas.html')">
+                            <i class="bi bi-calendar-check fs-4 d-block mb-2"></i>
+                            <small>Minhas Reservas</small>
+                        </button>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <button class="btn btn-outline-success w-100 py-3" onclick="navigateTo('app-calendar.html')">
+                            <i class="bi bi-calendar-event fs-4 d-block mb-2"></i>
+                            <small>Calendário</small>
+                        </button>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <button class="btn btn-outline-warning w-100 py-3" onclick="navigateTo('app-messages.html')">
+                            <i class="bi bi-chat-dots fs-4 d-block mb-2"></i>
+                            <small>Mensagens</small>
+                        </button>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <button class="btn btn-outline-info w-100 py-3" onclick="navigateTo('app-profile.html')">
+                            <i class="bi bi-person-circle fs-4 d-block mb-2"></i>
+                            <small>Perfil</small>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Info Box -->
+            <div class="col-12 mt-4">
+                <div class="alert alert-info" role="alert">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Bem-vindo à App!</strong> Todos os seus dados estão sincronizados com o website.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Notifications -->
+    <script src="js/shared/notifications.js"></script>
+
+    <!-- Loader -->
+    <script src="./js/shared/page-loader.js?v=20260213-loader" defer></script>
+
+    <!-- App Dashboard Logic -->
+    <script type="module">
+        import { db } from './js/core/firebase-config.js';
+        import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const userNameEl = document.getElementById('user-name');
+        const userEmailEl = document.getElementById('user-email');
+
+        // Verificar sessão
+        async function checkSession() {
+            const sessionToken = localStorage.getItem('appUserToken');
+            const userId = localStorage.getItem('appUserId');
+
+            if (!sessionToken || !userId) {
+                window.location.href = 'app-login.html';
+                return;
+            }
+
+            try {
+                const userDoc = await getDoc(doc(db, 'users', userId));
+                
+                if (!userDoc.exists()) {
+                    console.error('Utilizador não encontrado');
+                    logout();
+                    return;
+                }
+
+                const userData = userDoc.data();
+
+                // Verificar se a sessão é válida
+                if (userData.appSessionToken !== sessionToken) {
+                    console.error('Token inválido');
+                    logout();
+                    return;
+                }
+
+                // Verificar se a sessão não expirou
+                let sessionExpiresAt = new Date();
+                if (userData.appSessionExpiresAt) {
+                    if (userData.appSessionExpiresAt.seconds) {
+                        sessionExpiresAt = new Date(userData.appSessionExpiresAt.seconds * 1000);
+                    } else {
+                        sessionExpiresAt = new Date(userData.appSessionExpiresAt);
+                    }
+                }
+
+                if (new Date() > sessionExpiresAt) {
+                    console.error('Sessão expirada');
+                    logout();
+                    return;
+                }
+
+                // Verificar se o utilizador não está bloqueado
+                if (userData.isBlocked === true) {
+                    console.error('Utilizador bloqueado');
+                    logout();
+                    return;
+                }
+
+                // Carregar dados na UI
+                userNameEl.textContent = userData.name || userData.email;
+                userEmailEl.textContent = userData.email;
+
+            } catch (error) {
+                console.error('Erro ao verificar sessão:', error);
+                logout();
+            }
+        }
+
+        window.logout = async () => {
+            localStorage.removeItem('appUserToken');
+            localStorage.removeItem('appUserId');
+            localStorage.removeItem('appUserEmail');
+            localStorage.removeItem('appUserName');
+            window.location.href = 'app-login.html';
+        };
+
+        window.navigateTo = (page) => {
+            window.location.href = page;
+        };
+
+        // Executar verificação ao carregar
+        checkSession();
+    </script>
+
+</body>
+</html>
