@@ -349,6 +349,42 @@ body {
     transform: scale(1.1);
 }
 
+/* Homepage Footer */
+.site-footer {
+    background: linear-gradient(180deg, #111827 0%, #0b1220 100%);
+    border-top: 1px solid #334155;
+    padding: 3rem 0 1.25rem;
+}
+
+.site-footer h5 {
+    font-weight: 700;
+}
+
+.site-footer p {
+    color: #cbd5e1;
+}
+
+.footer-link {
+    color: #e2e8f0;
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.25s ease;
+}
+
+.footer-link:hover {
+    color: var(--padel-green);
+}
+
+.footer-bottom {
+    border-top: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+@media (max-width: 768px) {
+    .site-footer {
+        padding-top: 2.2rem;
+    }
+}
+
 /* Animations */
 .scroll-anim {
     opacity: 0;
