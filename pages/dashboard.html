@@ -703,15 +703,38 @@
                 const reservedSlots = await getReservedSlots(modalData.court, modalData.date);
                 
                 container.innerHTML = '';
+
+                // Verificar se a data selecionada é hoje
+                const now = new Date();
+                const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                const isToday = modalData.date === todayStr;
                 
                 slots.forEach(time => {
                     const isReserved = reservedSlots.includes(time);
+
+                    // Bloquear horários que já passaram (se for hoje)
+                    let isPast = false;
+                    if (isToday) {
+                        const [h, m] = time.split(':').map(Number);
+                        const slotDate = new Date();
+                        slotDate.setHours(h, m, 0, 0);
+                        const limit = new Date(now.getTime() + 30 * 60 * 1000);
+                        if (slotDate <= limit) isPast = true;
+                    }
+
+                    const isDisabled = isReserved || isPast;
                     const btn = document.createElement('button');
                     btn.type = 'button';
-                    btn.className = isReserved ? 'btn btn-secondary' : 'btn btn-outline-light';
+                    btn.className = isDisabled ? 'btn btn-secondary' : 'btn btn-outline-light';
                     btn.textContent = time;
-                    btn.disabled = isReserved;
-                    if (!isReserved) {
+                    btn.disabled = isDisabled;
+                    if (isPast && !isReserved) {
+                        btn.style.opacity = '0.5';
+                        btn.style.backgroundColor = '#343a40';
+                        btn.style.borderColor = '#343a40';
+                        btn.title = 'Horário já passou';
+                    }
+                    if (!isDisabled) {
                         btn.onclick = () => selectTimeModal(btn, time);
                     }
                     container.appendChild(btn);

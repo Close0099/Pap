@@ -205,6 +205,46 @@ body {
     color: var(--padel-green);
 }
 
+/* Star Rating */
+.star-rating {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    direction: rtl;
+}
+
+.star-rating input {
+    display: none;
+}
+
+.star-rating label {
+    font-size: 2.5rem;
+    color: #475569;
+    cursor: pointer;
+    transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.star-rating label:hover,
+.star-rating label:hover ~ label,
+.star-rating input:checked ~ label {
+    color: #facc15;
+    transform: scale(1.15);
+}
+
+.payment-option {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.payment-option:hover {
+    border-color: var(--padel-green) !important;
+}
+
+.payment-option.active {
+    border-color: var(--padel-green) !important;
+    background-color: rgba(132, 204, 22, 0.1) !important;
+}
+
 .bg-padel {
     background-color: var(--padel-green);
     color: black;
