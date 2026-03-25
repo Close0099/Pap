@@ -1,31 +1,41 @@
 // Service Worker para SmashLab PWA
-const CACHE_NAME = 'padel-club-v5-mar-11-2026-sw-fix';
+const CACHE_NAME = 'padel-club-v6-mar-20-2026-admin-reports-fix';
 const URLS_TO_CACHE = [
   '/',
   '/index.html',
   '/dashboard.html',
   '/admin-dashboard.html',
+  '/pages/dashboard.html',
+  '/pages/admin-dashboard.html',
   '/profile.html',
   '/user-management.html',
   '/css/style.css',
-  '/js/firebase-config.js',
-  '/js/auth.js',
-  '/js/dashboard.js',
-  '/js/admin-dashboard.js',
-  '/js/profile.js',
-  '/js/user-management.js',
-  '/js/notifications.js',
-  '/js/export-system.js',
+  '/js/core/firebase-config.js',
+  '/js/features/auth.js',
+  '/js/features/dashboard.js',
+  '/js/features/admin-dashboard.js',
+  '/js/features/profile.js',
+  '/js/features/user-management.js',
+  '/js/shared/notifications.js',
+  '/js/shared/export-system.js',
   '/manifest.json'
 ];
 
 // Instalar Service Worker
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(URLS_TO_CACHE).catch(err => {
-        console.log('Erro ao cachear recursos:', err);
-      });
+    caches.open(CACHE_NAME).then(async cache => {
+      const results = await Promise.allSettled(
+        URLS_TO_CACHE.map(url => cache.add(url))
+      );
+
+      const failed = results
+        .map((result, index) => ({ result, url: URLS_TO_CACHE[index] }))
+        .filter(item => item.result.status === 'rejected');
+
+      if (failed.length > 0) {
+        console.warn('Alguns recursos não foram cacheados:', failed.map(item => item.url));
+      }
     })
   );
   self.skipWaiting();

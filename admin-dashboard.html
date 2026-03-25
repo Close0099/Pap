@@ -50,42 +50,50 @@
             </div>
             
             <nav class="sidebar-nav">
-                <a href="#" class="sidebar-link active" onclick="showAdminSection('stats', this)">
+                <a href="admin-dashboard.html?section=stats" class="sidebar-link active" data-admin-section="stats" onclick="showAdminSection('stats', this); return false;">
                     <i class="bi bi-bar-chart-fill"></i>
                     <span>Estatísticas</span>
                 </a>
-                <a href="#" class="sidebar-link" onclick="showAdminSection('map', this)">
+                <a href="admin-dashboard.html?section=map" class="sidebar-link" data-admin-section="map" onclick="showAdminSection('map', this); return false;">
                     <i class="bi bi-calendar-week"></i>
                     <span>Mapa de Ocupação</span>
                 </a>
-                <a href="#" class="sidebar-link" onclick="showAdminSection('bookings', this)">
+                <a href="admin-dashboard.html?section=bookings" class="sidebar-link" data-admin-section="bookings" onclick="showAdminSection('bookings', this); return false;">
                     <i class="bi bi-journal-check"></i>
                     <span>Gestão de Reservas</span>
                 </a>
-                <a href="#" class="sidebar-link" onclick="showAdminSection('pricing', this)">
+                <a href="accepted-bookings.html" class="sidebar-link">
+                    <i class="bi bi-check2-square"></i>
+                    <span>Aceites Recentes</span>
+                </a>
+                <a href="admin-dashboard.html?section=pricing" class="sidebar-link" data-admin-section="pricing" onclick="showAdminSection('pricing', this); return false;">
                     <i class="bi bi-cash-stack"></i>
                     <span>Preços</span>
                 </a>
-                <a href="#" class="sidebar-link" onclick="showAdminSection('not-admitted', this)">
+                <a href="admin-dashboard.html?section=billing-reports" class="sidebar-link" data-admin-section="billing-reports" onclick="showAdminSection('billing-reports', this); return false;">
+                    <i class="bi bi-file-earmark-bar-graph"></i>
+                    <span>Relatórios de Faturação</span>
+                </a>
+                <a href="admin-dashboard.html?section=not-admitted" class="sidebar-link" data-admin-section="not-admitted" onclick="showAdminSection('not-admitted', this); return false;">
                     <i class="bi bi-exclamation-triangle"></i>
                     <span>Não Admitidas</span>
                     <span id="not-admitted-badge" class="badge bg-warning text-dark ms-2" style="display: none;">0</span>
                 </a>
-                <a href="#" class="sidebar-link" onclick="showAdminSection('cancellations', this)">
+                <a href="admin-dashboard.html?section=cancellations" class="sidebar-link" data-admin-section="cancellations" onclick="showAdminSection('cancellations', this); return false;">
                     <i class="bi bi-x-circle"></i>
                     <span>Marcações Canceladas</span>
                     <span id="cancellation-badge" class="badge bg-danger ms-2" style="display: none;">0</span>
                 </a>
-                <a href="#" class="sidebar-link" onclick="showAdminSection('evaluations', this)">
+                <a href="admin-dashboard.html?section=evaluations" class="sidebar-link" data-admin-section="evaluations" onclick="showAdminSection('evaluations', this); return false;">
                     <i class="bi bi-star-fill"></i>
                     <span>Avaliações</span>
                 </a>
-                <a href="#" class="sidebar-link" onclick="showAdminSection('payments', this)">
+                <a href="admin-dashboard.html?section=payments" class="sidebar-link" data-admin-section="payments" onclick="showAdminSection('payments', this); return false;">
                     <i class="bi bi-wallet2"></i>
                     <span>Pagamentos</span>
                     <span id="payments-badge" class="badge bg-info ms-2" style="display: none;">0</span>
                 </a>
-                <a href="#" class="sidebar-link" onclick="showAdminSection('logs', this)">
+                <a href="admin-dashboard.html?section=logs" class="sidebar-link" data-admin-section="logs" onclick="showAdminSection('logs', this); return false;">
                     <i class="bi bi-clipboard-data"></i>
                     <span>Logs</span>
                 </a>
@@ -233,11 +241,11 @@
         <section id="sec-map" style="display: none;">
         <div class="row mb-5">
             <div class="col-12">
-                <div class="d-flex justify-content-between align-items-center mb-4 border-bottom border-secondary pb-2">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4 border-bottom border-secondary pb-2">
                     <h3 class="text-white mb-0">
                         <i class="bi bi-calendar-week text-info"></i> Mapa de Ocupação
                     </h3>
-                    <div class="d-flex gap-2">
+                    <div class="d-flex flex-wrap gap-2 justify-content-end">
                         <button id="prev-day" class="btn btn-outline-secondary btn-sm"><i class="bi bi-chevron-left"></i></button>
                         <input type="date" id="admin-date-picker" class="form-control form-control-sm bg-dark text-white border-secondary" style="width: 150px;">
                         <button id="next-day" class="btn btn-outline-secondary btn-sm"><i class="bi bi-chevron-right"></i></button>
@@ -363,6 +371,133 @@
                                 <i class="bi bi-info-circle-fill"></i>
                                 Alterações aplicam-se a novas reservas. Reservas antigas mantêm o preço guardado no momento da marcação.
                             </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Secção de Relatórios de Faturação -->
+        <section id="sec-billing-reports" style="display: none;">
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 border-bottom border-secondary pb-2">
+                        <h3 class="text-white mb-0">
+                            <i class="bi bi-file-earmark-bar-graph text-padel"></i> Relatórios de Faturação
+                        </h3>
+                        <div class="d-flex gap-2">
+                            <button id="btn-preview-billing-report" class="btn btn-outline-padel btn-sm">
+                                <i class="bi bi-eye"></i> Pré-visualizar
+                            </button>
+                            <button id="btn-download-billing-csv" class="btn btn-padel btn-sm">
+                                <i class="bi bi-download"></i> Download CSV
+                            </button>
+                            <button id="btn-download-billing-pdf" class="btn btn-outline-light btn-sm">
+                                <i class="bi bi-file-earmark-pdf"></i> Download PDF
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="card card-custom p-3 mb-4">
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-3">
+                                <label for="billing-report-type" class="form-label text-secondary">Tipo de relatório</label>
+                                <select id="billing-report-type" class="form-select bg-dark text-white border-secondary">
+                                    <option value="week">Semanal</option>
+                                    <option value="month">Mensal</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3" id="billing-week-wrap">
+                                <label for="billing-week-picker" class="form-label text-secondary">Semana</label>
+                                <input type="week" id="billing-week-picker" class="form-control bg-dark text-white border-secondary">
+                            </div>
+                            <div class="col-md-3 d-none" id="billing-month-wrap">
+                                <label for="billing-month-picker" class="form-label text-secondary">Mês</label>
+                                <input type="month" id="billing-month-picker" class="form-control bg-dark text-white border-secondary">
+                            </div>
+                            <div class="col-md-6">
+                                <div class="alert alert-info bg-opacity-10 border border-info mb-0 py-2">
+                                    <small><i class="bi bi-info-circle-fill"></i> A faturação considera apenas reservas com estado <strong>Aprovado</strong>.</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card card-custom p-3 mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="text-white mb-0"><i class="bi bi-building me-2"></i>Configuração da Empresa (PDF)</h5>
+                            <button id="btn-save-billing-company-profile" class="btn btn-outline-padel btn-sm">
+                                <i class="bi bi-save"></i> Guardar Dados da Empresa
+                            </button>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label for="billing-company-legal-name" class="form-label text-secondary">Nome legal</label>
+                                <input id="billing-company-legal-name" type="text" class="form-control bg-dark text-white border-secondary" placeholder="Ex: SmashLab Padel Clube, Lda.">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="billing-company-tax-id" class="form-label text-secondary">NIF</label>
+                                <input id="billing-company-tax-id" type="text" class="form-control bg-dark text-white border-secondary" placeholder="Ex: NIF 517 890 321">
+                            </div>
+                            <div class="col-md-8">
+                                <label for="billing-company-address" class="form-label text-secondary">Morada</label>
+                                <input id="billing-company-address" type="text" class="form-control bg-dark text-white border-secondary" placeholder="Ex: Av. do Padel 128, 2750-410 Cascais, Portugal">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="billing-company-phone" class="form-label text-secondary">Telefone</label>
+                                <input id="billing-company-phone" type="text" class="form-control bg-dark text-white border-secondary" placeholder="Ex: +351 214 555 789">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="billing-company-email" class="form-label text-secondary">Email</label>
+                                <input id="billing-company-email" type="email" class="form-control bg-dark text-white border-secondary" placeholder="Ex: financeiro@smashlab.pt">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="billing-company-website" class="form-label text-secondary">Website</label>
+                                <input id="billing-company-website" type="text" class="form-control bg-dark text-white border-secondary" placeholder="Ex: www.smashlab.pt">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <div class="card bg-dark border-secondary text-center p-3 h-100">
+                                <small class="text-secondary d-block mb-1">Período</small>
+                                <div id="billing-preview-period" class="text-white fw-bold">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-dark border-secondary text-center p-3 h-100">
+                                <small class="text-secondary d-block mb-1">Total de Reservas</small>
+                                <div id="billing-preview-bookings" class="text-info fs-4 fw-bold">0</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-dark border-secondary text-center p-3 h-100">
+                                <small class="text-secondary d-block mb-1">Faturação Total</small>
+                                <div id="billing-preview-total" class="text-padel fs-4 fw-bold">0EUR</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card card-custom p-0 overflow-hidden">
+                        <div class="table-responsive">
+                            <table class="table table-dark table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th class="p-3">Data</th>
+                                        <th class="p-3">Hora</th>
+                                        <th class="p-3">Campo</th>
+                                        <th class="p-3">Utilizador</th>
+                                        <th class="p-3">Método Pagamento</th>
+                                        <th class="p-3">Valor</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="billing-preview-list">
+                                    <tr>
+                                        <td colspan="6" class="text-center text-secondary py-4">Seleciona um período para ver a pré-visualização.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -801,6 +936,7 @@
             document.getElementById('sec-map').style.display = 'none';
             document.getElementById('sec-bookings').style.display = 'none';
             document.getElementById('sec-pricing').style.display = 'none';
+            document.getElementById('sec-billing-reports').style.display = 'none';
             document.getElementById('sec-not-admitted').style.display = 'none';
             document.getElementById('sec-cancellations').style.display = 'none';
             document.getElementById('sec-evaluations').style.display = 'none';
@@ -816,6 +952,11 @@
                 element.classList.add('active');
             }
 
+            // Sincronizar URL com a secção atual sem recarregar a página
+            const url = new URL(window.location.href);
+            url.searchParams.set('section', sectionId);
+            window.history.replaceState({}, '', url.toString());
+
             // Mobile: close sidebar
             if (window.innerWidth < 992) {
                 document.getElementById('sidebar').classList.remove('active');
@@ -826,9 +967,14 @@
         document.addEventListener('DOMContentLoaded', () => {
             const params = new URLSearchParams(window.location.search);
             const section = params.get('section');
-            if (section) {
-                const link = document.querySelector(`.sidebar-link[onclick*="'${section}'"]`);
-                if (link) showAdminSection(section, link);
+            const fallbackSection = 'stats';
+            const targetSection = section || fallbackSection;
+            const link = document.querySelector(`.sidebar-link[data-admin-section="${targetSection}"]`) ||
+                document.querySelector(`.sidebar-link[data-admin-section="${fallbackSection}"]`);
+
+            if (link) {
+                const nextSection = link.getAttribute('data-admin-section') || fallbackSection;
+                showAdminSection(nextSection, link);
             }
         });
     </script>

@@ -30,6 +30,16 @@ const DEFAULT_PRICING = {
     eveningSurcharge: 5
 };
 
+const BILLING_COMPANY_PROFILE = {
+    legalName: 'SmashLab Padel Clube, Lda.',
+    taxId: 'NIF 517 890 321',
+    address: 'Av. do Padel 128, 2750-410 Cascais, Portugal',
+    phone: '+351 214 555 789',
+    email: 'financeiro@smashlab.pt',
+    website: 'www.smashlab.pt'
+};
+let billingCompanyProfile = { ...BILLING_COMPANY_PROFILE };
+
 let pricingSettings = { ...DEFAULT_PRICING, courts: { ...DEFAULT_PRICING.courts } };
 
 async function getCurrentActorMeta() {
@@ -402,6 +412,7 @@ onAuthStateChanged(auth, async (user) => {
                     loadActivityLogs();
                     initCalendar();
                     setupExportButtons();
+                    setupBillingReports();
                     listenPricingSettings();
                 } else {
                     window.location.href = 'dashboard.html';
@@ -422,6 +433,13 @@ onAuthStateChanged(auth, async (user) => {
 let revenueChartInstance = null;
 let courtsChartInstance = null;
 let allStatisticsBookings = [];
+let billingReportState = {
+    type: 'week',
+    label: '-',
+    rows: [],
+    totalRevenue: 0
+};
+let billingReportInitialized = false;
 
 function loadStatistics() {
     const q = query(collection(db, "reservas"));
@@ -432,6 +450,7 @@ function loadStatistics() {
             .filter(booking => booking.datetime);
 
         applyStatisticsFilter();
+        refreshBillingReportPreview(false);
     });
 }
 
@@ -562,6 +581,456 @@ function applyStatisticsFilter() {
     if (labelEl) labelEl.textContent = `Período: ${dateRange?.label || 'Tudo'}`;
 
     updateCharts(labels, revenueValues, bookingCountValues, courtUsage);
+}
+
+function getISOWeekNumber(date) {
+    const currentDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = currentDate.getUTCDay() || 7;
+    currentDate.setUTCDate(currentDate.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(currentDate.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((currentDate - yearStart) / 86400000) + 1) / 7);
+    return weekNo;
+}
+
+function getWeekInputValue(date = new Date()) {
+    const week = String(getISOWeekNumber(date)).padStart(2, '0');
+    return `${date.getFullYear()}-W${week}`;
+}
+
+function getDateRangeFromWeekValue(weekValue) {
+    if (!weekValue || !weekValue.includes('-W')) return null;
+
+    const [yearStr, weekStr] = weekValue.split('-W');
+    const year = Number(yearStr);
+    const week = Number(weekStr);
+    if (!Number.isFinite(year) || !Number.isFinite(week)) return null;
+
+    const jan4 = new Date(year, 0, 4);
+    const jan4Day = jan4.getDay() || 7;
+    const mondayWeek1 = new Date(jan4);
+    mondayWeek1.setDate(jan4.getDate() - jan4Day + 1);
+
+    const start = new Date(mondayWeek1);
+    start.setDate(mondayWeek1.getDate() + (week - 1) * 7);
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+
+    return { start, end };
+}
+
+function getDateRangeFromMonthValue(monthValue) {
+    if (!monthValue || !monthValue.includes('-')) return null;
+
+    const [yearStr, monthStr] = monthValue.split('-');
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    if (!Number.isFinite(year) || !Number.isFinite(month)) return null;
+
+    const start = new Date(year, month - 1, 1, 0, 0, 0, 0);
+    const end = new Date(year, month, 0, 23, 59, 59, 999);
+    return { start, end };
+}
+
+function formatEur(value) {
+    return `${Number(value || 0).toFixed(2)}EUR`;
+}
+
+function generateBillingReportData(type, start, end, label) {
+    const approvedBookings = allStatisticsBookings
+        .filter(booking => booking.status === 'Aprovado')
+        .filter(booking => {
+            const dt = new Date(booking.datetime);
+            return dt >= start && dt <= end;
+        })
+        .sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
+
+    const rows = approvedBookings.map(booking => {
+        const dt = new Date(booking.datetime);
+        const value = Number(booking.price || 0);
+        return {
+            date: dt.toLocaleDateString('pt-PT'),
+            time: dt.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }),
+            courtId: booking.courtId || 'Campo',
+            userEmail: booking.userEmail || '-',
+            paymentMethod: booking.paymentMethod || '-',
+            value
+        };
+    });
+
+    const totalRevenue = rows.reduce((sum, row) => sum + row.value, 0);
+
+    return {
+        type,
+        label,
+        start,
+        end,
+        rows,
+        totalRevenue
+    };
+}
+
+function formatDateForFileName(date) {
+    const dt = new Date(date);
+    const yyyy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+}
+
+function getBillingReportPeriodSuffix() {
+    const start = billingReportState.start;
+    const end = billingReportState.end;
+
+    if (!start || !end) return 'periodo';
+
+    return `${formatDateForFileName(start)}-ate-${formatDateForFileName(end)}`;
+}
+
+function renderBillingReportPreview(report) {
+    const periodEl = document.getElementById('billing-preview-period');
+    const bookingsEl = document.getElementById('billing-preview-bookings');
+    const totalEl = document.getElementById('billing-preview-total');
+    const listEl = document.getElementById('billing-preview-list');
+
+    if (periodEl) periodEl.textContent = report.label;
+    if (bookingsEl) bookingsEl.textContent = report.rows.length;
+    if (totalEl) totalEl.textContent = formatEur(report.totalRevenue);
+
+    if (!listEl) return;
+
+    if (report.rows.length === 0) {
+        listEl.innerHTML = '<tr><td colspan="6" class="text-center text-secondary py-4">Sem reservas aprovadas no período selecionado.</td></tr>';
+        return;
+    }
+
+    listEl.innerHTML = report.rows.map(row => `
+        <tr>
+            <td class="p-3 text-secondary">${row.date}</td>
+            <td class="p-3 text-white">${row.time}</td>
+            <td class="p-3 text-white">${row.courtId}</td>
+            <td class="p-3 text-secondary">${row.userEmail}</td>
+            <td class="p-3 text-secondary">${row.paymentMethod}</td>
+            <td class="p-3 text-padel fw-bold">${Number(row.value).toFixed(2)}EUR</td>
+        </tr>
+    `).join('');
+}
+
+function refreshBillingReportPreview(showValidationFeedback = true) {
+    const typeSelect = document.getElementById('billing-report-type');
+    const weekInput = document.getElementById('billing-week-picker');
+    const monthInput = document.getElementById('billing-month-picker');
+
+    if (!typeSelect || !weekInput || !monthInput) return;
+
+    const type = typeSelect.value || 'week';
+    let dateRange = null;
+    let label = '-';
+
+    if (type === 'week') {
+        dateRange = getDateRangeFromWeekValue(weekInput.value);
+        if (!dateRange) {
+            if (showValidationFeedback) Swal.fire('Validação', 'Seleciona uma semana válida.', 'warning');
+            return;
+        }
+        label = `Semana ${weekInput.value}`;
+    } else {
+        dateRange = getDateRangeFromMonthValue(monthInput.value);
+        if (!dateRange) {
+            if (showValidationFeedback) Swal.fire('Validação', 'Seleciona um mês válido.', 'warning');
+            return;
+        }
+        label = new Date(dateRange.start).toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' });
+    }
+
+    billingReportState = generateBillingReportData(type, dateRange.start, dateRange.end, label);
+    renderBillingReportPreview(billingReportState);
+}
+
+function downloadBillingReportCSV() {
+    if (!billingReportState.rows.length) {
+        if (window.Notification) {
+            window.Notification.warning('Aviso', 'Não existem dados para exportar no período selecionado.', 3000);
+        }
+        return;
+    }
+
+    const exportRows = billingReportState.rows.map(row => ({
+        'Periodo': billingReportState.label,
+        'Data': row.date,
+        'Hora': row.time,
+        'Campo': row.courtId,
+        'Email Utilizador': row.userEmail,
+        'Metodo Pagamento': row.paymentMethod,
+        'Valor': Number(row.value).toFixed(2) + 'EUR'
+    }));
+
+    const periodSuffix = getBillingReportPeriodSuffix();
+
+    const filename = `relatorio-faturacao-${billingReportState.type === 'week' ? 'semanal' : 'mensal'}-${periodSuffix}.csv`;
+    window.ExportSystem.exportToCSV(exportRows, filename);
+
+    if (window.Notification) {
+        window.Notification.success('✅ Exportado', `Ficheiro ${filename} descarregado com sucesso!`, 3000);
+    }
+}
+
+function escapeHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function buildBillingReportPDFHtml() {
+    const today = new Date();
+    const generatedAt = today.toLocaleDateString('pt-PT') + ' ' + today.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+    const adminEmail = auth.currentUser?.email || 'admin@smashlab.pt';
+    const reportRef = `RFT-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}-${String(today.getHours()).padStart(2, '0')}${String(today.getMinutes()).padStart(2, '0')}`;
+
+    const companyInfo = billingCompanyProfile;
+
+    const rowsHtml = billingReportState.rows.map((row, index) => `
+        <tr>
+            <td>${index + 1}</td>
+            <td>${escapeHtml(row.date)}</td>
+            <td>${escapeHtml(row.time)}</td>
+            <td>${escapeHtml(row.courtId)}</td>
+            <td>${escapeHtml(row.userEmail)}</td>
+            <td>${escapeHtml(row.paymentMethod)}</td>
+            <td style="text-align:right; font-weight:700;">${Number(row.value).toFixed(2)} EUR</td>
+        </tr>
+    `).join('');
+
+    return `
+        <div style="font-family: Arial, Helvetica, sans-serif; color:#0f172a;">
+            <div style="border:1px solid #cbd5e1; border-radius:12px; overflow:hidden;">
+                <div style="background:linear-gradient(90deg,#0f172a,#1e293b); color:#ffffff; padding:20px 24px;">
+                    <div style="font-size:24px; font-weight:800; letter-spacing:0.3px;">SMASHLAB PADEL CLUB</div>
+                    <div style="font-size:12px; opacity:0.9; margin-top:4px;">Relatório Oficial de Faturação</div>
+                </div>
+
+                <div style="padding:14px 24px; background:#ffffff; border-bottom:1px solid #e2e8f0;">
+                    <table style="width:100%; border-collapse:collapse; font-size:11px; color:#334155;">
+                        <tr>
+                            <td style="padding:2px 0;"><strong>Entidade:</strong> ${escapeHtml(companyInfo.legalName)}</td>
+                            <td style="padding:2px 0; text-align:right;"><strong>${escapeHtml(companyInfo.taxId)}</strong></td>
+                        </tr>
+                        <tr>
+                            <td style="padding:2px 0;">${escapeHtml(companyInfo.address)}</td>
+                            <td style="padding:2px 0; text-align:right;">${escapeHtml(companyInfo.website)}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:2px 0;">${escapeHtml(companyInfo.email)}</td>
+                            <td style="padding:2px 0; text-align:right;">${escapeHtml(companyInfo.phone)}</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div style="padding:20px 24px; background:#f8fafc; border-bottom:1px solid #e2e8f0;">
+                    <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                        <tr>
+                            <td style="padding:4px 0; color:#334155;"><strong>Período:</strong> ${escapeHtml(billingReportState.label)}</td>
+                            <td style="padding:4px 0; color:#334155; text-align:right;"><strong>Emitido em:</strong> ${generatedAt}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:4px 0; color:#334155;"><strong>Preparado por:</strong> ${escapeHtml(adminEmail)}</td>
+                            <td style="padding:4px 0; color:#334155; text-align:right;"><strong>Tipo:</strong> ${billingReportState.type === 'week' ? 'Semanal' : 'Mensal'}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:4px 0; color:#334155;"><strong>Referência:</strong> ${escapeHtml(reportRef)}</td>
+                            <td style="padding:4px 0; color:#334155; text-align:right;"><strong>Moeda:</strong> EUR</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div style="padding:16px 24px;">
+                    <div style="display:flex; gap:12px; margin-bottom:16px;">
+                        <div style="flex:1; border:1px solid #e2e8f0; border-radius:8px; padding:12px; background:#ffffff;">
+                            <div style="font-size:11px; color:#64748b; text-transform:uppercase; letter-spacing:0.4px;">Total Reservas</div>
+                            <div style="font-size:22px; font-weight:800; color:#0f172a; margin-top:6px;">${billingReportState.rows.length}</div>
+                        </div>
+                        <div style="flex:1; border:1px solid #e2e8f0; border-radius:8px; padding:12px; background:#ffffff;">
+                            <div style="font-size:11px; color:#64748b; text-transform:uppercase; letter-spacing:0.4px;">Faturação Total</div>
+                            <div style="font-size:22px; font-weight:800; color:#0f766e; margin-top:6px;">${Number(billingReportState.totalRevenue).toFixed(2)} EUR</div>
+                        </div>
+                    </div>
+
+                    <table style="width:100%; border-collapse:collapse; font-size:11px;">
+                        <thead>
+                            <tr style="background:#e2e8f0; color:#0f172a;">
+                                <th style="padding:8px; border:1px solid #cbd5e1;">#</th>
+                                <th style="padding:8px; border:1px solid #cbd5e1;">Data</th>
+                                <th style="padding:8px; border:1px solid #cbd5e1;">Hora</th>
+                                <th style="padding:8px; border:1px solid #cbd5e1;">Campo</th>
+                                <th style="padding:8px; border:1px solid #cbd5e1;">Utilizador</th>
+                                <th style="padding:8px; border:1px solid #cbd5e1;">Pagamento</th>
+                                <th style="padding:8px; border:1px solid #cbd5e1; text-align:right;">Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rowsHtml}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="padding:10px 24px; border-top:1px solid #e2e8f0; background:#f8fafc; font-size:10px; color:#64748b; display:flex; justify-content:space-between; gap:12px;">
+                    <span>Documento gerado automaticamente pelo sistema administrativo SmashLab.</span>
+                    <span>${escapeHtml(companyInfo.legalName)} | ${escapeHtml(companyInfo.taxId)}</span>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function getBillingCompanyProfileFromForm() {
+    return {
+        legalName: document.getElementById('billing-company-legal-name')?.value?.trim() || BILLING_COMPANY_PROFILE.legalName,
+        taxId: document.getElementById('billing-company-tax-id')?.value?.trim() || BILLING_COMPANY_PROFILE.taxId,
+        address: document.getElementById('billing-company-address')?.value?.trim() || BILLING_COMPANY_PROFILE.address,
+        phone: document.getElementById('billing-company-phone')?.value?.trim() || BILLING_COMPANY_PROFILE.phone,
+        email: document.getElementById('billing-company-email')?.value?.trim() || BILLING_COMPANY_PROFILE.email,
+        website: document.getElementById('billing-company-website')?.value?.trim() || BILLING_COMPANY_PROFILE.website
+    };
+}
+
+function fillBillingCompanyProfileForm(profile) {
+    const nameEl = document.getElementById('billing-company-legal-name');
+    const taxEl = document.getElementById('billing-company-tax-id');
+    const addressEl = document.getElementById('billing-company-address');
+    const phoneEl = document.getElementById('billing-company-phone');
+    const emailEl = document.getElementById('billing-company-email');
+    const websiteEl = document.getElementById('billing-company-website');
+
+    if (nameEl) nameEl.value = profile.legalName || '';
+    if (taxEl) taxEl.value = profile.taxId || '';
+    if (addressEl) addressEl.value = profile.address || '';
+    if (phoneEl) phoneEl.value = profile.phone || '';
+    if (emailEl) emailEl.value = profile.email || '';
+    if (websiteEl) websiteEl.value = profile.website || '';
+}
+
+async function loadBillingCompanyProfile() {
+    try {
+        const profileRef = doc(db, 'settings', 'billingCompanyProfile');
+        const profileSnap = await getDoc(profileRef);
+
+        if (profileSnap.exists()) {
+            billingCompanyProfile = {
+                ...BILLING_COMPANY_PROFILE,
+                ...profileSnap.data()
+            };
+        } else {
+            billingCompanyProfile = { ...BILLING_COMPANY_PROFILE };
+        }
+
+        fillBillingCompanyProfileForm(billingCompanyProfile);
+    } catch (error) {
+        console.error('Erro ao carregar perfil da empresa para faturação:', error);
+        billingCompanyProfile = { ...BILLING_COMPANY_PROFILE };
+        fillBillingCompanyProfileForm(billingCompanyProfile);
+    }
+}
+
+async function saveBillingCompanyProfile() {
+    try {
+        const nextProfile = getBillingCompanyProfileFromForm();
+        const adminEmail = auth.currentUser?.email || 'admin';
+
+        await setDoc(doc(db, 'settings', 'billingCompanyProfile'), {
+            ...nextProfile,
+            updatedBy: adminEmail,
+            updatedAt: serverTimestamp()
+        }, { merge: true });
+
+        billingCompanyProfile = { ...nextProfile };
+
+        await logActivity(
+            'Atualizou dados institucionais de faturação',
+            `Entidade: ${nextProfile.legalName}`,
+            { targetType: 'billingCompanyProfile', targetId: 'settings/billingCompanyProfile' }
+        );
+
+        Swal.fire('Guardado!', 'Os dados da empresa para o PDF foram atualizados.', 'success');
+    } catch (error) {
+        console.error('Erro ao guardar perfil da empresa para faturação:', error);
+        Swal.fire('Erro', 'Não foi possível guardar os dados da empresa.', 'error');
+    }
+}
+
+async function downloadBillingReportPDF() {
+    if (!billingReportState.rows.length) {
+        if (window.Notification) {
+            window.Notification.warning('Aviso', 'Não existem dados para exportar no período selecionado.', 3000);
+        }
+        return;
+    }
+
+    const periodSuffix = getBillingReportPeriodSuffix();
+
+    const filename = `relatorio-faturacao-${billingReportState.type === 'week' ? 'semanal' : 'mensal'}-${periodSuffix}.pdf`;
+
+    try {
+        await window.ExportSystem.exportToPDF(buildBillingReportPDFHtml(), filename);
+        if (window.Notification) {
+            window.Notification.success('✅ Exportado', `Ficheiro ${filename} descarregado com sucesso!`, 3000);
+        }
+    } catch (error) {
+        console.error('Erro ao exportar PDF:', error);
+        Swal.fire('Erro', 'Não foi possível gerar o PDF.', 'error');
+    }
+}
+
+function setupBillingReports() {
+    if (billingReportInitialized) return;
+
+    const typeSelect = document.getElementById('billing-report-type');
+    const weekWrap = document.getElementById('billing-week-wrap');
+    const monthWrap = document.getElementById('billing-month-wrap');
+    const weekInput = document.getElementById('billing-week-picker');
+    const monthInput = document.getElementById('billing-month-picker');
+    const btnPreview = document.getElementById('btn-preview-billing-report');
+    const btnDownloadCSV = document.getElementById('btn-download-billing-csv');
+    const btnDownloadPDF = document.getElementById('btn-download-billing-pdf');
+    const btnSaveCompanyProfile = document.getElementById('btn-save-billing-company-profile');
+
+    if (!typeSelect || !weekWrap || !monthWrap || !weekInput || !monthInput) return;
+
+    weekInput.value = getWeekInputValue(new Date());
+    monthInput.value = new Date().toISOString().slice(0, 7);
+
+    const toggleTypeFields = () => {
+        const isWeekly = typeSelect.value === 'week';
+        weekWrap.classList.toggle('d-none', !isWeekly);
+        monthWrap.classList.toggle('d-none', isWeekly);
+    };
+
+    typeSelect.addEventListener('change', () => {
+        toggleTypeFields();
+        refreshBillingReportPreview(false);
+    });
+
+    weekInput.addEventListener('change', () => {
+        if (typeSelect.value === 'week') refreshBillingReportPreview(false);
+    });
+
+    monthInput.addEventListener('change', () => {
+        if (typeSelect.value === 'month') refreshBillingReportPreview(false);
+    });
+
+    if (btnPreview) btnPreview.addEventListener('click', () => refreshBillingReportPreview(true));
+    if (btnDownloadCSV) btnDownloadCSV.addEventListener('click', downloadBillingReportCSV);
+    if (btnDownloadPDF) btnDownloadPDF.addEventListener('click', downloadBillingReportPDF);
+    if (btnSaveCompanyProfile) btnSaveCompanyProfile.addEventListener('click', saveBillingCompanyProfile);
+
+    toggleTypeFields();
+    loadBillingCompanyProfile();
+    refreshBillingReportPreview(false);
+    billingReportInitialized = true;
 }
 
 function updateCharts(labels, revenueValues, countValues, courtUsage) {

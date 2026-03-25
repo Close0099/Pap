@@ -688,6 +688,42 @@ body {
 
 .bg-slot-blocked { background-color: #475569; border-left: 3px solid #94a3b8; color: #cbd5e1; }
 
+/* Ajustes dedicados ao mapa de ocupação do admin */
+#sec-map .card.card-custom {
+    overflow-x: auto;
+}
+
+#sec-map .calendar-grid {
+    grid-template-columns: 72px repeat(3, minmax(110px, 1fr));
+    min-width: 420px;
+}
+
+#sec-map .calendar-header-cell {
+    padding: 8px 6px;
+    font-size: 0.8rem;
+    line-height: 1.2;
+}
+
+#sec-map .calendar-time-cell {
+    font-size: 0.78rem;
+    padding: 8px 4px;
+}
+
+#sec-map .calendar-slot {
+    min-height: 54px;
+    padding: 4px;
+}
+
+#sec-map .calendar-booking {
+    font-size: 0.68rem;
+    line-height: 1.25;
+    white-space: normal;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+}
+
 /* ===== UPGRADES DE PRIORIDADE ALTA ===== */
 
 /* 1. RESPONSIVIDADE MOBILE */
@@ -731,6 +767,16 @@ body {
         min-height: 45px;
         padding: 3px;
     }
+
+    #sec-map .calendar-grid {
+        grid-template-columns: 64px repeat(3, 110px) !important;
+        min-width: 394px;
+        font-size: 0.76rem;
+    }
+
+    #sec-map .calendar-slot {
+        min-height: 50px;
+    }
 }
 
 @media (max-width: 992px) {
@@ -741,6 +787,11 @@ body {
     
     .calendar-slot {
         min-height: 50px;
+    }
+
+    #sec-map .calendar-grid {
+        grid-template-columns: 68px repeat(3, minmax(110px, 1fr)) !important;
+        min-width: 410px;
     }
 }
 

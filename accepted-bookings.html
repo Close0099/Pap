@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="pt-br" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Reservas aceites mais recentes no painel admin SmashLab">
+    <meta name="theme-color" content="#0f172a">
+    <title>Reservas Aceites Recentes - SmashLab</title>
+    <link rel="icon" type="image/png" href="img/imagem.png">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="css/style.css?v=2.3">
+    <link rel="manifest" href="manifest.json">
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').catch(err => console.log('SW registration failed:', err));
+        }
+    </script>
+</head>
+<body>
+    <div class="d-flex">
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <i class="bi bi-shield-lock-fill text-padel"></i>
+                </div>
+                <h5 class="sidebar-title mb-0">Smash<span class="text-padel">Lab</span> <span class="badge bg-padel ms-1" style="font-size: 0.5rem; vertical-align: top;">ADMIN</span></h5>
+                <button class="btn-close-sidebar d-lg-none" onclick="toggleSidebar()">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="admin-dashboard.html?section=stats" class="sidebar-link">
+                    <i class="bi bi-bar-chart-fill"></i>
+                    <span>Estatísticas</span>
+                </a>
+                <a href="admin-dashboard.html?section=map" class="sidebar-link">
+                    <i class="bi bi-calendar-week"></i>
+                    <span>Mapa de Ocupação</span>
+                </a>
+                <a href="admin-dashboard.html?section=bookings" class="sidebar-link">
+                    <i class="bi bi-journal-check"></i>
+                    <span>Gestão de Reservas</span>
+                </a>
+                <a href="admin-dashboard.html?section=pricing" class="sidebar-link">
+                    <i class="bi bi-cash-stack"></i>
+                    <span>Preços</span>
+                </a>
+                <a href="admin-dashboard.html?section=billing-reports" class="sidebar-link">
+                    <i class="bi bi-file-earmark-bar-graph"></i>
+                    <span>Relatórios de Faturação</span>
+                </a>
+                <a href="admin-dashboard.html?section=not-admitted" class="sidebar-link">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <span>Não Admitidas</span>
+                </a>
+                <a href="admin-dashboard.html?section=cancellations" class="sidebar-link">
+                    <i class="bi bi-x-circle"></i>
+                    <span>Marcações Canceladas</span>
+                </a>
+                <a href="admin-dashboard.html?section=evaluations" class="sidebar-link">
+                    <i class="bi bi-star-fill"></i>
+                    <span>Avaliações</span>
+                </a>
+                <a href="admin-dashboard.html?section=payments" class="sidebar-link">
+                    <i class="bi bi-wallet2"></i>
+                    <span>Pagamentos</span>
+                </a>
+                <a href="admin-dashboard.html?section=logs" class="sidebar-link">
+                    <i class="bi bi-clipboard-data"></i>
+                    <span>Logs</span>
+                </a>
+                <a href="#" class="sidebar-link active">
+                    <i class="bi bi-check2-square"></i>
+                    <span>Aceites Recentes</span>
+                </a>
+                <a href="user-management.html" class="sidebar-link">
+                    <i class="bi bi-people-fill"></i>
+                    <span>Utilizadores</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <a href="#" onclick="logout()" class="sidebar-link text-danger">
+                    <i class="bi bi-box-arrow-right"></i>
+                    <span>Sair</span>
+                </a>
+            </div>
+        </div>
+
+        <div class="main-content w-100">
+            <div class="d-lg-none d-flex justify-content-between align-items-center mb-4 px-3 pt-3">
+                <h5 class="text-white mb-0">Aceites Recentes</h5>
+                <button class="btn btn-dark" onclick="toggleSidebar()">
+                    <i class="bi bi-list fs-4"></i>
+                </button>
+            </div>
+
+            <div class="container-fluid p-4">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 border-bottom border-secondary pb-2">
+                    <h3 class="text-white mb-0">
+                        <i class="bi bi-check2-circle text-success"></i> Reservas Aceites Mais Recentes
+                    </h3>
+                    <div class="d-flex gap-2">
+                        <span class="badge bg-secondary" id="accepted-total">0 reservas</span>
+                        <button id="btn-refresh-accepted" class="btn btn-outline-padel btn-sm">
+                            <i class="bi bi-arrow-repeat"></i> Atualizar
+                        </button>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-4">
+                    <div class="col-md-4">
+                        <div class="card bg-dark border-secondary text-center p-3">
+                            <small class="text-secondary d-block mb-1">Hoje</small>
+                            <div id="accepted-today" class="text-info fs-4 fw-bold">0</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-dark border-secondary text-center p-3">
+                            <small class="text-secondary d-block mb-1">Esta Semana</small>
+                            <div id="accepted-week" class="text-padel fs-4 fw-bold">0</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-dark border-secondary text-center p-3">
+                            <small class="text-secondary d-block mb-1">Última Atualização</small>
+                            <div id="accepted-updated-at" class="text-white fw-bold">-</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card card-custom p-0 overflow-hidden">
+                    <div class="table-responsive">
+                        <table class="table table-dark table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="p-3">Data</th>
+                                    <th class="p-3">Hora</th>
+                                    <th class="p-3">Campo</th>
+                                    <th class="p-3">Utilizador</th>
+                                    <th class="p-3">Email</th>
+                                    <th class="p-3">Preço</th>
+                                    <th class="p-3">Pagamento</th>
+                                </tr>
+                            </thead>
+                            <tbody id="accepted-bookings-list">
+                                <tr>
+                                    <td colspan="7" class="text-center py-4 text-secondary">A carregar reservas aceites...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="./js/shared/notifications.js"></script>
+    <script type="module" src="./js/features/accepted-bookings.js"></script>
+
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('active');
+        }
+    </script>
+
+    <script type="module">
+        import { auth } from './js/core/firebase-config.js';
+        import { signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+
+        window.logout = async () => {
+            try {
+                await signOut(auth);
+                window.location.href = 'index.html';
+            } catch (error) {
+                console.error('Erro ao sair:', error);
+            }
+        };
+    </script>
+</body>
+</html>
