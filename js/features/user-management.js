@@ -4,6 +4,11 @@ import { collection, query, where, getDocs, doc, getDoc, updateDoc, setDoc, dele
 
 const usersList = document.getElementById('users-list');
 const createUserForm = document.getElementById('create-user-form');
+const PROTECTED_ADMIN_EMAIL = (window.APP_PROTECTED_ADMIN_EMAIL || '').trim().toLowerCase();
+
+function isProtectedAccount(email = '') {
+    return !!PROTECTED_ADMIN_EMAIL && String(email).toLowerCase() === PROTECTED_ADMIN_EMAIL;
+}
 
 // Flag para bloquear redirecionamentos durante criação
 let isCreatingUser = false;
@@ -179,7 +184,7 @@ function createUserRow(user) {
             </button>
         </td>
         <td class="d-flex gap-2">
-            ${user.email !== 'lmesteves08@gmail.com' ? `
+            ${!isProtectedAccount(user.email) ? `
                 <button class="btn btn-sm btn-outline-warning" onclick="toggleAdminStatus('${user.id}', ${isAdmin})" title="${isAdmin ? 'Remover Admin' : 'Tornar Admin'}">
                     <i class="bi bi-shield-${isAdmin ? 'slash' : 'lock'}"></i>
                 </button>
@@ -190,7 +195,7 @@ function createUserRow(user) {
             <button class="btn btn-sm btn-outline-danger" onclick="toggleBlockUser('${user.id}', ${isBlocked})" title="${isBlocked ? 'Desbloquear' : 'Bloquear'}">
                 <i class="bi ${isBlocked ? 'bi-unlock' : 'bi-lock'}"></i>
             </button>
-            ${user.email !== 'lmesteves08@gmail.com' ? `
+            ${!isProtectedAccount(user.email) ? `
                 <button class="btn btn-sm btn-outline-danger" onclick="deleteUser('${user.id}')" title="Eliminar">
                     <i class="bi bi-trash"></i>
                 </button>
@@ -294,7 +299,7 @@ window.toggleAdminStatus = async (userId, isCurrentAdmin) => {
     const userDoc = await getDoc(doc(db, "users", userId));
     const userData = userDoc.data();
     
-    if (userData.email === 'lmesteves08@gmail.com') {
+    if (isProtectedAccount(userData.email)) {
         if (window.Notification) {
             window.Notification.error('❌ Bloqueado', 'Esta conta está protegida e não pode ser modificada.', 3000);
         }
@@ -374,7 +379,7 @@ window.deleteUser = async (userId) => {
     const userDoc = await getDoc(doc(db, "users", userId));
     const userData = userDoc.data();
     
-    if (userData.email === 'lmesteves08@gmail.com') {
+    if (isProtectedAccount(userData.email)) {
         if (window.Notification) {
             window.Notification.error('❌ Bloqueado', 'Esta conta está protegida e não pode ser eliminada.', 3000);
         }
@@ -427,6 +432,21 @@ function generateNumericCode() {
     return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+async function generateUniqueAppLoginCode(maxAttempts = 8) {
+    for (let i = 0; i < maxAttempts; i++) {
+        const candidate = generateNumericCode();
+        const existingQuery = query(collection(db, 'users'), where('appLoginCode', '==', candidate));
+        const existingSnapshot = await getDocs(existingQuery);
+
+        if (existingSnapshot.empty) {
+            return candidate;
+        }
+    }
+
+    // Fallback raro: usa o último código gerado mesmo após colisões repetidas
+    return generateNumericCode();
+}
+
 window.generateAppLoginCode = async (userId) => {
     const userFromList = allUsers.find(u => u.id === userId);
     const userName = userFromList?.name || 'Utilizador';
@@ -446,7 +466,7 @@ window.generateAppLoginCode = async (userId) => {
     if (!result.isConfirmed) return;
 
     try {
-        const code = generateNumericCode();
+        const code = await generateUniqueAppLoginCode();
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
         await updateDoc(doc(db, "users", userId), {
@@ -784,7 +804,7 @@ function renderUserDetails(user, userId) {
 
         <div>
             <h6 class="text-padel mb-3">⚙️ Ações Rápidas</h6>
-            ${user.email !== 'lmesteves08@gmail.com' ? `
+            ${!isProtectedAccount(user.email) ? `
                 <button class="btn btn-sm btn-outline-warning me-2" onclick="toggleAdminStatus('${userId}', ${isAdmin})">
                     <i class="bi bi-shield-${isAdmin ? 'slash' : 'lock'}"></i> ${isAdmin ? 'Remover Admin' : 'Tornar Admin'}
                 </button>

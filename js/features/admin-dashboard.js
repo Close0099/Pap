@@ -31,12 +31,12 @@ const DEFAULT_PRICING = {
 };
 
 const BILLING_COMPANY_PROFILE = {
-    legalName: 'SmashLab Padel Clube, Lda.',
-    taxId: 'NIF 517 890 321',
-    address: 'Av. do Padel 128, 2750-410 Cascais, Portugal',
-    phone: '+351 214 555 789',
-    email: 'financeiro@smashlab.pt',
-    website: 'www.smashlab.pt'
+    legalName: '',
+    taxId: '',
+    address: '',
+    phone: '',
+    email: '',
+    website: ''
 };
 let billingCompanyProfile = { ...BILLING_COMPANY_PROFILE };
 
@@ -789,7 +789,7 @@ function escapeHtml(value) {
 function buildBillingReportPDFHtml() {
     const today = new Date();
     const generatedAt = today.toLocaleDateString('pt-PT') + ' ' + today.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
-    const adminEmail = auth.currentUser?.email || 'admin@smashlab.pt';
+    const adminEmail = auth.currentUser?.email || 'admin@exemplo.com';
     const reportRef = `RFT-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}-${String(today.getHours()).padStart(2, '0')}${String(today.getMinutes()).padStart(2, '0')}`;
 
     const companyInfo = billingCompanyProfile;

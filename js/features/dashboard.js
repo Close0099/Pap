@@ -90,6 +90,55 @@ async function logClientActivity(action, details, meta = {}) {
     }
 }
 
+async function sendTelegramBookingNotification(payload = {}) {
+    const botToken = window.APP_TELEGRAM_BOT_TOKEN || '';
+    const chatId = window.APP_TELEGRAM_CHAT_ID || '';
+
+    if (!botToken || !chatId) {
+        return;
+    }
+
+    const adminUrl = `${window.location.origin}/admin-dashboard.html`;
+
+    const lines = [
+        'Nova reserva recebida',
+        `Campo: ${payload.courtId || '-'}`,
+        `Data/Hora: ${payload.datetime || '-'}`,
+        `Preco: ${Number(payload.price || 0)} EUR`,
+        `Cliente: ${payload.userEmail || '-'}`,
+        `Origem: ${payload.origin || 'dashboard'}`,
+        `Admin: ${adminUrl}`
+    ];
+
+    const text = lines.join('\n');
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+        const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            signal: controller.signal,
+            body: JSON.stringify({
+                chat_id: chatId,
+                text
+            })
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            const body = await response.text();
+            throw new Error(`Telegram HTTP ${response.status}: ${body}`);
+        }
+    } catch (error) {
+        console.warn('Falha ao enviar notificação Telegram:', error);
+    }
+}
+
 // 1. Verificar Autenticação
 onAuthStateChanged(auth, async (user) => {
     if (user) {
@@ -671,9 +720,6 @@ function selectTime(btn, time) {
     selectedTimeInput.value = time;
     confirmBtn.disabled = false;
 
-    // Mostrar opção de recurso após selecionar hora
-    document.getElementById('recurring-container').classList.remove('d-none');
-
     updatePrice(time);
 }
 
@@ -750,17 +796,23 @@ if (bookingForm) {
                 throw new Error("SLOT_NOW_TAKEN");
             }
 
-            const isRecurring = document.getElementById('recurring-checkbox').checked;
-            
-            await addDoc(collection(db, "reservas"), {
+            const reservationRef = await addDoc(collection(db, "reservas"), {
                 userId: currentUser.uid,
                 userEmail: currentUser.email,
                 datetime: finalDateTime,
                 courtId: courtVal,
                 price: finalPrice,
                 status: "Pendente",
-                recurring: isRecurring,
                 timestamp: new Date()
+            });
+
+            await sendTelegramBookingNotification({
+                bookingId: reservationRef.id,
+                userEmail: currentUser.email,
+                datetime: finalDateTime,
+                courtId: courtVal,
+                price: finalPrice,
+                origin: 'dashboard-main-form'
             });
 
             await logClientActivity(
@@ -784,7 +836,6 @@ if (bookingForm) {
             selectedTimeInput.value = '';
             confirmBtn.textContent = "Confirmar Reserva";
             confirmBtn.disabled = true;
-            document.getElementById('recurring-checkbox').checked = false;
             loadTimeSlots();
 
         } catch (error) {
