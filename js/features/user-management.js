@@ -47,6 +47,15 @@ let allUsers = [];
 let unsubscribeUsers = null;
 let unsubscribeReservas = null;
 let pollingInterval = null;
+let reservasStatsByUser = {};
+
+function applyReservationStatsToUsers(users) {
+    users.forEach(user => {
+        const stats = reservasStatsByUser[user.id] || { totalReservas: 0, totalNoShows: 0 };
+        user.totalReservas = stats.totalReservas;
+        user.totalNoShows = stats.totalNoShows;
+    });
+}
 
 function loadUsers() {
     // Limpar listeners e polling anteriores
@@ -66,19 +75,27 @@ function loadUsers() {
     try {
         // Listener para mudanças nas reservas
         unsubscribeReservas = onSnapshot(qReservas, (reservasSnapshot) => {
-            
-            // Contar reservas por utilizador
-            const reservasPorUser = {};
+            // Contar reservas e faltas (no-show) por utilizador
+            const statsByUser = {};
             reservasSnapshot.forEach(doc => {
                 const reserva = doc.data();
                 const userId = reserva.userId;
-                reservasPorUser[userId] = (reservasPorUser[userId] || 0) + 1;
+                if (!statsByUser[userId]) {
+                    statsByUser[userId] = { totalReservas: 0, totalNoShows: 0 };
+                }
+
+                statsByUser[userId].totalReservas += 1;
+
+                const isNoShow = reserva.noShow === true || reserva.paymentMethod === 'Não compareci';
+                if (isNoShow) {
+                    statsByUser[userId].totalNoShows += 1;
+                }
             });
 
+            reservasStatsByUser = statsByUser;
+
             // Atualizar contagem nas linhas existentes
-            allUsers.forEach(user => {
-                user.totalReservas = reservasPorUser[user.id] || 0;
-            });
+            applyReservationStatsToUsers(allUsers);
 
             // Renderizar novamente
             renderUsersList(allUsers);
@@ -93,15 +110,17 @@ function loadUsers() {
             allUsers = [];
             
             if (snapshot.empty) {
-                usersList.innerHTML = '<tr><td colspan="8" class="text-center py-3 text-secondary">Nenhum utilizador encontrado.</td></tr>';
+                usersList.innerHTML = '<tr><td colspan="9" class="text-center py-3 text-secondary">Nenhum utilizador encontrado.</td></tr>';
                 return;
             }
 
             snapshot.forEach(doc => {
                 const userData = doc.data();
                 const userId = doc.id;
-                allUsers.push({ id: userId, ...userData, totalReservas: 0 });
+                allUsers.push({ id: userId, ...userData, totalReservas: 0, totalNoShows: 0 });
             });
+
+            applyReservationStatsToUsers(allUsers);
 
             renderUsersList(allUsers);
         }, (error) => {
@@ -123,6 +142,7 @@ function loadUsers() {
                     });
                     allUsers = newUsers;
                     lastCount = snapshot.size;
+                    applyReservationStatsToUsers(allUsers);
                     renderUsersList(allUsers);
                 }
             } catch (error) {
@@ -134,7 +154,7 @@ function loadUsers() {
 
     } catch (error) {
         console.error('Erro ao carregar utilizadores:', error);
-        usersList.innerHTML = '<tr><td colspan="8" class="text-center py-3 text-danger">Erro ao carregar utilizadores.</td></tr>';
+        usersList.innerHTML = '<tr><td colspan="9" class="text-center py-3 text-danger">Erro ao carregar utilizadores.</td></tr>';
     }
 }
 
@@ -155,6 +175,7 @@ function createUserRow(user) {
     
     const isAdmin = user.isAdmin === true || user.role === 'admin';
     const totalReservas = user.totalReservas || 0;
+    const totalNoShows = user.totalNoShows || 0;
     const isBlocked = user.isBlocked === true;
     const messageCount = user.unreadMessages || 0;
 
@@ -167,6 +188,11 @@ function createUserRow(user) {
             </span>
         </td>
         <td class="text-white">${totalReservas}</td>
+        <td>
+            <span class="badge ${totalNoShows > 0 ? 'bg-warning text-dark' : 'bg-secondary'}">
+                ${totalNoShows}
+            </span>
+        </td>
         <td>
             <span class="badge ${isBlocked ? 'bg-danger' : 'bg-success'}">
                 ${isBlocked ? 'Bloqueado' : 'Ativo'}
@@ -346,20 +372,42 @@ window.toggleBlockUser = async (userId, isCurrentlyBlocked) => {
         text: isCurrentlyBlocked 
             ? 'Este utilizador voltará a ter acesso.' 
             : 'Este utilizador não poderá fazer reservas.',
+        input: isCurrentlyBlocked ? undefined : 'textarea',
+        inputLabel: isCurrentlyBlocked ? '' : 'Mensagem obrigatória para o utilizador',
+        inputPlaceholder: isCurrentlyBlocked ? '' : 'Ex: Conta bloqueada por pagamentos pendentes. Contacte a receção.',
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#84cc16',
         cancelButtonColor: '#334155',
         confirmButtonText: 'Confirmar',
-        cancelButtonText: 'Cancelar'
+        cancelButtonText: 'Cancelar',
+        inputValidator: (value) => {
+            if (!isCurrentlyBlocked && !String(value || '').trim()) {
+                return 'Escreve a mensagem que o utilizador vai ver ao tentar reservar.';
+            }
+            return null;
+        }
     });
 
     if (!result.isConfirmed) return;
 
     try {
-        await updateDoc(doc(db, "users", userId), {
-            isBlocked: !isCurrentlyBlocked
-        });
+        if (isCurrentlyBlocked) {
+            await updateDoc(doc(db, "users", userId), {
+                isBlocked: false,
+                blockMessage: '',
+                blockedAt: null,
+                blockedBy: null
+            });
+        } else {
+            const blockMessage = String(result.value || '').trim();
+            await updateDoc(doc(db, "users", userId), {
+                isBlocked: true,
+                blockMessage,
+                blockedAt: new Date(),
+                blockedBy: auth.currentUser?.email || 'admin'
+            });
+        }
 
         if (window.Notification) {
             window.Notification.success('✅ Atualizado', isCurrentlyBlocked ? 'Utilizador desbloqueado.' : 'Utilizador bloqueado.', 3000);
@@ -711,6 +759,7 @@ function renderUserDetails(user, userId) {
     const isAdmin = user.isAdmin === true || user.role === 'admin';
     const isBlocked = user.isBlocked === true;
     const unreadMessages = user.unreadMessages || 0;
+    const totalNoShows = reservas.filter(r => r.noShow === true || r.paymentMethod === 'Não compareci').length;
 
     // HTML com detalhes
     let html = `
@@ -745,6 +794,12 @@ function renderUserDetails(user, userId) {
                     <small class="text-secondary">Mensagens Não Lidas</small>
                     <p class="text-white fw-bold">
                         ${unreadMessages > 0 ? `<span class="badge bg-warning">${unreadMessages}</span>` : '<span class="text-secondary">0</span>'}
+                    </p>
+                </div>
+                <div class="col-md-6 mb-2">
+                    <small class="text-secondary">Faltas (Não Compareceu)</small>
+                    <p class="text-white fw-bold">
+                        <span class="badge ${totalNoShows > 0 ? 'bg-warning text-dark' : 'bg-secondary'}">${totalNoShows}</span>
                     </p>
                 </div>
             </div>
@@ -784,12 +839,16 @@ function renderUserDetails(user, userId) {
                                 }
                                 
                                 const status = r.status || 'Pendente';
-                                const statusColor = status === 'Aprovado' ? 'success' : status === 'Recusado' ? 'danger' : 'warning';
+                                const isNoShow = r.noShow === true || r.paymentMethod === 'Não compareci';
+                                const statusText = isNoShow ? 'Não compareceu' : status;
+                                const statusColor = isNoShow
+                                    ? 'secondary'
+                                    : (status === 'Aprovado' ? 'success' : status === 'Recusado' ? 'danger' : 'warning');
                                 return `
                                     <tr>
                                         <td>${displayDate}</td>
                                         <td>${displayTime}</td>
-                                        <td><span class="badge bg-${statusColor}">${status}</span></td>
+                                        <td><span class="badge bg-${statusColor}">${statusText}</span></td>
                                     </tr>
                                 `;
                             }).join('')}

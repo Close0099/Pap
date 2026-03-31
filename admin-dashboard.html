@@ -93,6 +93,11 @@
                     <span>Pagamentos</span>
                     <span id="payments-badge" class="badge bg-info ms-2" style="display: none;">0</span>
                 </a>
+                <a href="admin-dashboard.html?section=non-payments" class="sidebar-link" data-admin-section="non-payments" onclick="showAdminSection('non-payments', this); return false;">
+                    <i class="bi bi-cash-coin"></i>
+                    <span>Não Pagas</span>
+                    <span id="non-payments-badge" class="badge bg-danger ms-2" style="display: none;">0</span>
+                </a>
                 <a href="admin-dashboard.html?section=logs" class="sidebar-link" data-admin-section="logs" onclick="showAdminSection('logs', this); return false;">
                     <i class="bi bi-clipboard-data"></i>
                     <span>Logs</span>
@@ -858,6 +863,54 @@
             </div>
         </section>
 
+        <!-- Secção de Não Pagas (Resumo por Utilizador) -->
+        <section id="sec-non-payments" style="display: none;">
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 border-bottom border-secondary pb-2">
+                        <h3 class="text-white mb-0">
+                            <i class="bi bi-cash-coin text-danger"></i> Utilizadores com Não Pagas
+                        </h3>
+                        <div class="d-flex gap-2">
+                            <span class="badge bg-danger">
+                                <i class="bi bi-people-fill"></i> <span id="non-payments-users-count">0</span> utilizadores
+                            </span>
+                            <span class="badge bg-warning text-dark">
+                                <i class="bi bi-currency-euro"></i> <span id="non-payments-total-debt">0EUR</span> em dívida
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-warning bg-opacity-10 border border-warning">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        <strong>Instruções:</strong> Esta lista agrega reservas marcadas como <strong>Não Pagou</strong> por utilizador. Podes enviar mensagem e bloquear conta diretamente.
+                    </div>
+
+                    <div class="card card-custom p-0 overflow-hidden">
+                        <div class="table-responsive">
+                            <table class="table table-dark table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th class="p-3">Utilizador</th>
+                                        <th class="p-3">Email</th>
+                                        <th class="p-3">Nº Não Pagas</th>
+                                        <th class="p-3">Total em Dívida</th>
+                                        <th class="p-3">Última Não Paga</th>
+                                        <th class="p-3">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="non-payments-list">
+                                    <tr>
+                                        <td colspan="6" class="text-center text-secondary py-4">A carregar utilizadores com não pagas...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- Secção de Logs -->
         <section id="sec-logs" style="display: none;">
             <div class="row mb-4">
@@ -941,6 +994,7 @@
             document.getElementById('sec-cancellations').style.display = 'none';
             document.getElementById('sec-evaluations').style.display = 'none';
             document.getElementById('sec-payments').style.display = 'none';
+            document.getElementById('sec-non-payments').style.display = 'none';
             document.getElementById('sec-logs').style.display = 'none';
 
             // Show selected

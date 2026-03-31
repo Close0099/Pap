@@ -50,7 +50,8 @@ service cloud.firestore {
       
       // Qualquer utilizador autenticado pode criar (mas apenas com seu próprio userId)
       allow create: if request.auth != null && 
-        request.resource.data.userId == request.auth.uid;
+        request.resource.data.userId == request.auth.uid &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isBlocked != true;
       
       // Utilizador pode atualizar/apagar suas próprias reservas ou admin pode fazer qualquer coisa
       allow update, delete: if request.auth != null && 

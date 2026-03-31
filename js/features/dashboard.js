@@ -63,6 +63,28 @@ function calculateBookingPrice(court, time) {
     return base + surcharge;
 }
 
+async function getCurrentUserBlockState() {
+    if (!currentUser?.uid) {
+        return { isBlocked: false, message: '' };
+    }
+
+    try {
+        const userSnap = await getDoc(doc(db, 'users', currentUser.uid));
+        if (!userSnap.exists()) {
+            return { isBlocked: false, message: '' };
+        }
+
+        const userData = userSnap.data() || {};
+        return {
+            isBlocked: userData.isBlocked === true,
+            message: String(userData.blockMessage || '').trim()
+        };
+    } catch (error) {
+        console.error('Erro ao validar estado de bloqueio:', error);
+        throw error;
+    }
+}
+
 async function logClientActivity(action, details, meta = {}) {
     if (!currentUser) return;
 
@@ -740,6 +762,22 @@ if (bookingForm) {
         
         if (!currentUser) return;
 
+        try {
+            const blockState = await getCurrentUserBlockState();
+            if (blockState.isBlocked) {
+                const adminMessage = blockState.message || 'A tua conta encontra-se bloqueada. Contacta o administrador para mais detalhes.';
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Conta bloqueada',
+                    html: `<p>${adminMessage}</p>`
+                });
+                return;
+            }
+        } catch (validationError) {
+            Swal.fire('Erro', 'Não foi possível validar o estado da conta. Tenta novamente.', 'error');
+            return;
+        }
+
         const dateVal = datePicker.value;
         const timeVal = selectedTimeInput.value;
         const courtVal = courtSelect.value;
@@ -1181,6 +1219,14 @@ async function showEvaluationModal(booking) {
                     <small class="text-white">Cartão</small>
                 </div>
             </div>
+
+            <div class="form-check mt-4 text-start">
+                <input class="form-check-input" type="checkbox" value="1" id="swal-no-show">
+                <label class="form-check-label text-warning" for="swal-no-show">
+                    Não compareci
+                </label>
+                <div class="text-secondary small">Se selecionares esta opção, não precisas de indicar avaliação nem pagamento.</div>
+            </div>
         `,
         confirmButtonText: 'Enviar Avaliação',
         confirmButtonColor: '#84cc16',
@@ -1196,8 +1242,40 @@ async function showEvaluationModal(booking) {
                     opt.classList.add('active');
                 });
             });
+
+            const noShowCheckbox = Swal.getPopup().querySelector('#swal-no-show');
+            const ratingInputs = Swal.getPopup().querySelectorAll('input[name="rating"]');
+            const paymentOptions = Swal.getPopup().querySelectorAll('.payment-option');
+
+            if (noShowCheckbox) {
+                noShowCheckbox.addEventListener('change', () => {
+                    const isNoShow = noShowCheckbox.checked;
+
+                    ratingInputs.forEach(input => {
+                        input.disabled = isNoShow;
+                        if (isNoShow) input.checked = false;
+                    });
+
+                    paymentOptions.forEach(option => {
+                        option.classList.toggle('opacity-50', isNoShow);
+                        option.style.pointerEvents = isNoShow ? 'none' : 'auto';
+                        if (isNoShow) option.classList.remove('active');
+                    });
+                });
+            }
         },
         preConfirm: () => {
+            const noShowCheckbox = Swal.getPopup().querySelector('#swal-no-show');
+            const isNoShow = noShowCheckbox?.checked === true;
+
+            if (isNoShow) {
+                return {
+                    noShow: true,
+                    rating: null,
+                    paymentMethod: 'Não compareci'
+                };
+            }
+
             const selectedStar = Swal.getPopup().querySelector('input[name="rating"]:checked');
             const selectedPayment = Swal.getPopup().querySelector('.payment-option.active');
 
@@ -1211,6 +1289,7 @@ async function showEvaluationModal(booking) {
             }
 
             return {
+                noShow: false,
                 rating: Number(selectedStar.value),
                 paymentMethod: selectedPayment.getAttribute('data-method')
             };
@@ -1219,11 +1298,15 @@ async function showEvaluationModal(booking) {
 
     if (result.isConfirmed && result.value) {
         try {
+            const isNoShow = result.value.noShow === true;
+
             // Guardar avaliação na reserva
             await updateDoc(doc(db, 'reservas', booking.id), {
                 evaluated: true,
                 rating: result.value.rating,
                 paymentMethod: result.value.paymentMethod,
+                noShow: isNoShow,
+                noShowDeclaredAt: isNoShow ? new Date() : null,
                 evaluatedAt: new Date()
             });
 
@@ -1237,19 +1320,28 @@ async function showEvaluationModal(booking) {
                 price: booking.price,
                 rating: result.value.rating,
                 paymentMethod: result.value.paymentMethod,
+                noShow: isNoShow,
                 createdAt: new Date()
             });
 
-            await logClientActivity(
-                'Avaliou reserva',
-                `${booking.courtId} em ${booking.datetime} — ${result.value.rating}★, pagamento: ${result.value.paymentMethod}`,
-                { targetType: 'evaluation', targetId: booking.id }
-            );
+            if (isNoShow) {
+                await logClientActivity(
+                    'Indicou falta à reserva',
+                    `${booking.courtId} em ${booking.datetime} — Não compareceu`,
+                    { targetType: 'evaluation', targetId: booking.id }
+                );
+            } else {
+                await logClientActivity(
+                    'Avaliou reserva',
+                    `${booking.courtId} em ${booking.datetime} — ${result.value.rating}★, pagamento: ${result.value.paymentMethod}`,
+                    { targetType: 'evaluation', targetId: booking.id }
+                );
+            }
 
             Swal.fire({
                 icon: 'success',
-                title: 'Obrigado!',
-                text: 'A tua avaliação foi registada.',
+                title: isNoShow ? 'Registo efetuado' : 'Obrigado!',
+                text: isNoShow ? 'A falta foi registada com sucesso.' : 'A tua avaliação foi registada.',
                 timer: 1800,
                 showConfirmButton: false
             });

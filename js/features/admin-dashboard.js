@@ -409,6 +409,7 @@ onAuthStateChanged(auth, async (user) => {
                     checkAndMarkNotAdmitted();
                     loadEvaluations();
                     loadPayments();
+                    loadNonPayments();
                     loadActivityLogs();
                     initCalendar();
                     setupExportButtons();
@@ -2462,21 +2463,29 @@ function renderEvaluations(evaluations) {
         const evalDate = ev.evaluatedAt?.toDate?.() || (ev.evaluatedAt ? new Date(ev.evaluatedAt) : new Date());
         const evalDateStr = evalDate.toLocaleDateString('pt-PT') + ' ' + evalDate.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
 
-        const stars = '⭐'.repeat(ev.rating) + '<span class="text-secondary">' + '☆'.repeat(5 - ev.rating) + '</span>';
+        const ratingValue = Number(ev.rating);
+        const hasValidRating = Number.isFinite(ratingValue) && ratingValue >= 1 && ratingValue <= 5;
+        const stars = ev.noShow === true
+            ? '<span class="badge bg-secondary">Não compareceu</span>'
+            : (hasValidRating
+                ? ('⭐'.repeat(ratingValue) + '<span class="text-secondary">' + '☆'.repeat(5 - ratingValue) + '</span>')
+                : '-');
 
         const paymentIcons = {
             'Dinheiro': '<i class="bi bi-cash-stack text-success"></i> Dinheiro',
             'MBway': '<i class="bi bi-phone text-info"></i> MBway',
             'Cartão': '<i class="bi bi-credit-card text-warning"></i> Cartão'
         };
-        const paymentDisplay = paymentIcons[ev.paymentMethod] || ev.paymentMethod || '-';
+        const paymentDisplay = ev.noShow === true
+            ? '<span class="text-secondary">Não compareceu</span>'
+            : (paymentIcons[ev.paymentMethod] || ev.paymentMethod || '-');
 
         return `
             <tr>
                 <td class="text-white small">${dateStr}</td>
                 <td class="text-white">${ev.courtId || '-'}</td>
                 <td class="text-secondary">${ev.userEmail || '-'}</td>
-                <td>${stars} <span class="text-secondary small">(${ev.rating}/5)</span></td>
+                <td>${stars}${hasValidRating && ev.noShow !== true ? ` <span class="text-secondary small">(${ratingValue}/5)</span>` : ''}</td>
                 <td>${paymentDisplay}</td>
                 <td class="text-secondary small">${evalDateStr}</td>
             </tr>
@@ -2499,12 +2508,17 @@ function updateEvaluationStats(evaluations) {
     }
 
     const total = evaluations.length;
-    const avgRating = (evaluations.reduce((sum, e) => sum + (e.rating || 0), 0) / total).toFixed(1);
-    const count5 = evaluations.filter(e => e.rating === 5).length;
+    const ratedEvaluations = evaluations.filter(e => e.noShow !== true && Number.isFinite(Number(e.rating)));
+    const avgRating = ratedEvaluations.length > 0
+        ? (ratedEvaluations.reduce((sum, e) => sum + Number(e.rating), 0) / ratedEvaluations.length).toFixed(1)
+        : '-';
+    const count5 = ratedEvaluations.filter(e => Number(e.rating) === 5).length;
 
     // Método de pagamento mais usado
     const paymentCounts = {};
-    evaluations.forEach(e => {
+    evaluations
+        .filter(e => e.noShow !== true)
+        .forEach(e => {
         const m = e.paymentMethod || 'Outro';
         paymentCounts[m] = (paymentCounts[m] || 0) + 1;
     });
@@ -2548,6 +2562,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // ============================================
 
 let allPaymentBookings = [];
+let nonPaymentUsers = [];
 
 function loadPayments() {
     const paymentsList = document.getElementById('payments-list');
@@ -2562,12 +2577,256 @@ function loadPayments() {
     onSnapshot(qEvaluated, async (snapshot) => {
         allPaymentBookings = [];
         snapshot.forEach(docSnap => {
-            allPaymentBookings.push({ id: docSnap.id, ...docSnap.data() });
+            const data = docSnap.data();
+            if (data.noShow === true) return;
+            allPaymentBookings.push({ id: docSnap.id, ...data });
         });
 
         applyPaymentFilters();
     });
 }
+
+function formatEuro(value) {
+    return `${Number(value || 0).toFixed(2)}EUR`;
+}
+
+async function loadNonPayments() {
+    const nonPaymentsList = document.getElementById('non-payments-list');
+    if (!nonPaymentsList) return;
+
+    const qNonPayments = query(
+        collection(db, 'reservas'),
+        where('paymentNotPaid', '==', true)
+    );
+
+    onSnapshot(qNonPayments, async (snapshot) => {
+        const grouped = new Map();
+
+        snapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            const userId = data.userId || '';
+            const userEmail = data.userEmail || 'Sem email';
+            const key = userId || userEmail;
+            const price = Number(data.price || 0);
+            const bookingDate = new Date(data.datetime || data.paymentNotPaidAt || Date.now());
+
+            if (!grouped.has(key)) {
+                grouped.set(key, {
+                    userId,
+                    userEmail,
+                    userName: data.userName || '',
+                    totalDue: 0,
+                    bookingsCount: 0,
+                    latestDate: bookingDate,
+                    latestBookingId: docSnap.id
+                });
+            }
+
+            const entry = grouped.get(key);
+            entry.totalDue += price;
+            entry.bookingsCount += 1;
+            if (bookingDate > entry.latestDate) {
+                entry.latestDate = bookingDate;
+                entry.latestBookingId = docSnap.id;
+            }
+            if (!entry.userName && data.userName) {
+                entry.userName = data.userName;
+            }
+        });
+
+        const users = await Promise.all([...grouped.values()].map(async (entry) => {
+            if (entry.userName && entry.userEmail !== 'Sem email') return entry;
+
+            if (entry.userId) {
+                const profile = await getUserProfile(entry.userId);
+                return {
+                    ...entry,
+                    userName: entry.userName || profile.name || entry.userEmail.split('@')[0] || 'Utilizador',
+                    userEmail: entry.userEmail !== 'Sem email' ? entry.userEmail : (profile.email || 'Sem email')
+                };
+            }
+
+            return {
+                ...entry,
+                userName: entry.userName || entry.userEmail.split('@')[0] || 'Utilizador'
+            };
+        }));
+
+        nonPaymentUsers = users.sort((a, b) => b.totalDue - a.totalDue);
+        renderNonPaymentUsers();
+        updateNonPaymentsSummary();
+    }, (error) => {
+        console.error('Erro ao carregar utilizadores com não pagas:', error);
+        nonPaymentsList.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-4">Erro ao carregar não pagas.</td></tr>';
+    });
+}
+
+function updateNonPaymentsSummary() {
+    const usersCountEl = document.getElementById('non-payments-users-count');
+    const totalDebtEl = document.getElementById('non-payments-total-debt');
+    const badgeEl = document.getElementById('non-payments-badge');
+
+    const usersCount = nonPaymentUsers.length;
+    const totalDebt = nonPaymentUsers.reduce((sum, item) => sum + Number(item.totalDue || 0), 0);
+
+    if (usersCountEl) usersCountEl.textContent = String(usersCount);
+    if (totalDebtEl) totalDebtEl.textContent = formatEuro(totalDebt);
+
+    if (badgeEl) {
+        badgeEl.textContent = String(usersCount);
+        badgeEl.style.display = usersCount > 0 ? 'inline-block' : 'none';
+    }
+}
+
+function renderNonPaymentUsers() {
+    const nonPaymentsList = document.getElementById('non-payments-list');
+    if (!nonPaymentsList) return;
+
+    if (!nonPaymentUsers.length) {
+        nonPaymentsList.innerHTML = '<tr><td colspan="6" class="text-center text-secondary py-4">Sem utilizadores com pagamentos em falta.</td></tr>';
+        return;
+    }
+
+    nonPaymentsList.innerHTML = nonPaymentUsers.map(item => {
+        const displayName = escapeHtml(item.userName || item.userEmail.split('@')[0] || 'Utilizador');
+        const displayEmail = escapeHtml(item.userEmail || 'Sem email');
+        const latestStr = item.latestDate instanceof Date && !Number.isNaN(item.latestDate.getTime())
+            ? item.latestDate.toLocaleDateString('pt-PT') + ' ' + item.latestDate.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })
+            : '-';
+
+        const messageBtn = item.userId
+            ? `<button class="btn btn-sm btn-outline-info" onclick="sendDebtMessage('${item.userId}')"><i class="bi bi-envelope-fill"></i> Mensagem</button>`
+            : '<button class="btn btn-sm btn-outline-info" disabled><i class="bi bi-envelope-fill"></i> Mensagem</button>';
+        const blockBtn = item.userId
+            ? `<button class="btn btn-sm btn-outline-danger" onclick="blockDebtUser('${item.userId}')"><i class="bi bi-lock-fill"></i> Bloquear</button>`
+            : '<button class="btn btn-sm btn-outline-danger" disabled><i class="bi bi-lock-fill"></i> Bloquear</button>';
+
+        return `
+            <tr>
+                <td class="text-white">${displayName}</td>
+                <td class="text-secondary">${displayEmail}</td>
+                <td><span class="badge bg-danger">${item.bookingsCount}</span></td>
+                <td class="text-warning fw-bold">${formatEuro(item.totalDue)}</td>
+                <td class="text-secondary small">${latestStr}</td>
+                <td class="d-flex gap-2">${messageBtn}${blockBtn}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+window.sendDebtMessage = async (userId) => {
+    const target = nonPaymentUsers.find(u => u.userId === userId);
+    if (!target) {
+        Swal.fire('Aviso', 'Utilizador não encontrado.', 'warning');
+        return;
+    }
+
+    const modal = await Swal.fire({
+        title: 'Enviar mensagem de pagamento',
+        html: `
+            <div class="text-start small text-secondary mb-2">Utilizador: <strong class="text-white">${escapeHtml(target.userName || target.userEmail)}</strong></div>
+            <div class="text-start small text-secondary mb-3">Total em dívida: <strong class="text-warning">${formatEuro(target.totalDue)}</strong></div>
+            <textarea id="swal-debt-message" class="swal2-textarea" style="display:block; width:100%;" placeholder="Mensagem para o utilizador">Olá! Tens ${formatEuro(target.totalDue)} em pagamentos pendentes (${target.bookingsCount} reserva(s)). Por favor regulariza junto da receção. Obrigado.</textarea>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Enviar',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#0ea5e9',
+        preConfirm: () => {
+            const text = document.getElementById('swal-debt-message')?.value?.trim();
+            if (!text) {
+                Swal.showValidationMessage('Escreve uma mensagem.');
+                return false;
+            }
+            return text;
+        }
+    });
+
+    if (!modal.isConfirmed) return;
+
+    try {
+        const adminDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+        const adminName = adminDoc.exists() ? (adminDoc.data().name || 'Admin') : 'Admin';
+
+        await addDoc(collection(db, 'messages'), {
+            userId,
+            title: '⚠️ Pagamento pendente',
+            content: modal.value,
+            from: adminName,
+            fromEmail: auth.currentUser.email,
+            read: false,
+            createdAt: new Date(),
+            timestamp: Date.now()
+        });
+
+        const userRef = doc(db, 'users', userId);
+        const userSnap = await getDoc(userRef);
+        const unread = userSnap.exists() ? (userSnap.data().unreadMessages || 0) : 0;
+        await updateDoc(userRef, { unreadMessages: unread + 1 });
+
+        await logActivity(
+            'Enviou aviso de dívida',
+            `${target.userEmail} - ${formatEuro(target.totalDue)} (${target.bookingsCount} não pagas)`,
+            { targetType: 'payment', targetId: userId }
+        );
+
+        Swal.fire('Enviado!', 'Mensagem enviada com sucesso.', 'success');
+    } catch (error) {
+        console.error('Erro ao enviar mensagem de dívida:', error);
+        Swal.fire('Erro', 'Não foi possível enviar mensagem.', 'error');
+    }
+};
+
+window.blockDebtUser = async (userId) => {
+    const target = nonPaymentUsers.find(u => u.userId === userId);
+    if (!target) {
+        Swal.fire('Aviso', 'Utilizador não encontrado.', 'warning');
+        return;
+    }
+
+    const result = await Swal.fire({
+        title: 'Bloquear utilizador?',
+        text: `Bloquear ${target.userName || target.userEmail} por pagamentos pendentes?`,
+        input: 'textarea',
+        inputLabel: 'Mensagem obrigatória para o utilizador',
+        inputPlaceholder: `Ex: Conta bloqueada por dívida de ${formatEuro(target.totalDue)}. Contacte a receção para regularizar.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Sim, bloquear',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#dc3545',
+        inputValidator: (value) => {
+            if (!String(value || '').trim()) {
+                return 'Escreve a mensagem que o utilizador vai ver ao tentar reservar.';
+            }
+            return null;
+        }
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+        const blockMessage = String(result.value || '').trim();
+
+        await updateDoc(doc(db, 'users', userId), {
+            isBlocked: true,
+            blockMessage,
+            blockedAt: new Date(),
+            blockedBy: auth.currentUser?.email || 'admin'
+        });
+
+        await logActivity(
+            'Bloqueou utilizador por dívida',
+            `${target.userEmail} - ${formatEuro(target.totalDue)} em falta`,
+            { targetType: 'user', targetId: userId }
+        );
+
+        Swal.fire('Bloqueado!', 'Utilizador bloqueado com sucesso.', 'success');
+    } catch (error) {
+        console.error('Erro ao bloquear utilizador por dívida:', error);
+        Swal.fire('Erro', 'Não foi possível bloquear o utilizador.', 'error');
+    }
+};
 
 function applyPaymentFilters() {
     let filtered = [...allPaymentBookings];

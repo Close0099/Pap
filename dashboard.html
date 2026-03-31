@@ -634,6 +634,23 @@
             }
         }
 
+        async function getCurrentUserBlockStateModal() {
+            if (!auth.currentUser?.uid) {
+                return { isBlocked: false, message: '' };
+            }
+
+            const userSnap = await getDoc(doc(db, 'users', auth.currentUser.uid));
+            if (!userSnap.exists()) {
+                return { isBlocked: false, message: '' };
+            }
+
+            const userData = userSnap.data() || {};
+            return {
+                isBlocked: userData.isBlocked === true,
+                message: String(userData.blockMessage || '').trim()
+            };
+        }
+
         // Inicializar Flatpickr no modal
         let datePickerInstance = null;
 
@@ -922,6 +939,17 @@
             try {
                 if (!auth.currentUser) {
                     throw new Error("Utilizador não autenticado. Por favor, faz login novamente.");
+                }
+
+                const blockState = await getCurrentUserBlockStateModal();
+                if (blockState.isBlocked) {
+                    const adminMessage = blockState.message || 'A tua conta encontra-se bloqueada. Contacta o administrador para mais detalhes.';
+                    await Swal.fire({
+                        icon: 'warning',
+                        title: 'Conta bloqueada',
+                        html: `<p>${adminMessage}</p>`
+                    });
+                    return;
                 }
 
                 // Construir datetime final
