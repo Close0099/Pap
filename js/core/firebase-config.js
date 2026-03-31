@@ -1,4 +1,5 @@
 // Importar as funções do SDK que precisas
+import './runtime-config.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -10,14 +11,31 @@ import { getFirestore } from "https://www.gstatic.com/firebasejs/10.7.1/firebase
 // 4. Desce até "As tuas aplicações" e seleciona a app Web (</>)
 // 5. Copia o objeto "firebaseConfig" e substitui abaixo:
 
+const runtimeConfig = window.__FIREBASE_CONFIG__ || {};
+
 const firebaseConfig = {
-  apiKey: "AIzaSyASa9hSUdlyZE5Yl05cgvvjXzBhQcAGL0A",
-  authDomain: "pap-padel-v2.firebaseapp.com",
-  projectId: "pap-padel-v2",
-  storageBucket: "pap-padel-v2.firebasestorage.app",
-  messagingSenderId: "150777728680",
-  appId: "1:150777728680:web:6e58984c6221b46280fc9d"
+  apiKey: runtimeConfig.apiKey || "",
+  authDomain: runtimeConfig.authDomain || "",
+  projectId: runtimeConfig.projectId || "",
+  storageBucket: runtimeConfig.storageBucket || "",
+  messagingSenderId: runtimeConfig.messagingSenderId || "",
+  appId: runtimeConfig.appId || ""
 };
+
+const requiredConfigKeys = [
+  'apiKey',
+  'authDomain',
+  'projectId',
+  'storageBucket',
+  'messagingSenderId',
+  'appId'
+];
+
+const missingConfigKeys = requiredConfigKeys.filter((key) => !firebaseConfig[key]);
+
+if (missingConfigKeys.length > 0) {
+  throw new Error(`Firebase não configurado. Define window.__FIREBASE_CONFIG__ com: ${missingConfigKeys.join(', ')}`);
+}
 
 // Inicializar Firebase
 const app = initializeApp(firebaseConfig);

@@ -5,7 +5,10 @@ service cloud.firestore {
     // Função auxiliar para verificar se é admin
     function isAdmin() {
       return request.auth != null && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+        (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"
+        );
     }
     
     // Coleção de Utilizadores
@@ -47,7 +50,8 @@ service cloud.firestore {
       
       // Qualquer utilizador autenticado pode criar (mas apenas com seu próprio userId)
       allow create: if request.auth != null && 
-        request.resource.data.userId == request.auth.uid;
+        request.resource.data.userId == request.auth.uid &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isBlocked != true;
       
       // Utilizador pode atualizar/apagar suas próprias reservas ou admin pode fazer qualquer coisa
       allow update, delete: if request.auth != null && 
@@ -66,6 +70,28 @@ service cloud.firestore {
       
       // Apenas Admin pode criar, atualizar ou apagar
       allow create, update, delete: if isAdmin();
+    }
+
+    // Configurações da plataforma (ex: preços)
+    match /settings/{settingId} {
+      // Utilizadores autenticados podem ler para cálculo no cliente
+      allow read: if request.auth != null;
+
+      // Apenas admin pode criar/alterar/apagar
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Logs de atividade (auditoria)
+    match /activityLogs/{logId} {
+      // Apenas admins podem consultar logs
+      allow read, list: if isAdmin();
+
+      // Qualquer autenticado pode registar ações próprias
+      allow create: if request.auth != null &&
+        request.resource.data.actorId == request.auth.uid;
+
+      // Logs não podem ser alterados/apagados pelo cliente
+      allow update, delete: if false;
     }
     
     // Coleção de Mensagens (Admin → Utilizador)
@@ -103,6 +129,23 @@ service cloud.firestore {
       
       // Admin pode apagar notificações antigas
       allow delete: if isAdmin();
+    }
+
+    // Coleção de Avaliações
+    match /evaluations/{evaluationId} {
+      // Utilizadores podem criar avaliações das suas reservas
+      allow create: if request.auth != null &&
+        request.resource.data.userId == request.auth.uid;
+
+      // Admin pode ler todas; utilizador pode ler as suas
+      allow read: if isAdmin() || 
+        (request.auth != null && resource.data.userId == request.auth.uid);
+
+      // Listar: admin pode listar todas
+      allow list: if isAdmin();
+
+      // Avaliações não podem ser alteradas/apagadas pelo cliente
+      allow update, delete: if isAdmin();
     }
   }
 }

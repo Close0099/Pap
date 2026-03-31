@@ -101,8 +101,8 @@
 
                 // Ordenar por data (mais recentes primeiro)
                 reservas.sort((a, b) => {
-                    const dateA = new Date(a.date + ' ' + (a.time || '00:00'));
-                    const dateB = new Date(b.date + ' ' + (b.time || '00:00'));
+                    const dateA = new Date(a.datetime || (a.date + 'T' + (a.time || '00:00')));
+                    const dateB = new Date(b.datetime || (b.date + 'T' + (b.time || '00:00')));
                     return dateB - dateA;
                 });
 
@@ -117,8 +117,9 @@
                 }
 
                 // Agrupar por status
-                const upcoming = reservas.filter(r => r.status !== 'Recusado');
+                const upcoming = reservas.filter(r => r.status !== 'Recusado' && r.status !== 'Não Admitida');
                 const rejected = reservas.filter(r => r.status === 'Recusado');
+                const notAdmitted = reservas.filter(r => r.status === 'Não Admitida');
 
                 let html = '';
 
@@ -127,8 +128,12 @@
                     html += '<div class="row g-3 mb-4">';
                     upcoming.forEach(r => {
                         const status = r.status || 'Pendente';
-                        const statusColor = status === 'Aprovado' ? 'success' : status === 'Pendente' ? 'warning' : 'danger';
-                        const displayDate = new Date(r.date + 'T12:00:00').toLocaleDateString('pt-PT');
+                        const statusColor = status === 'Aprovado' ? 'success' : status === 'Pendente' ? 'warning' : status === 'Não Admitida' ? 'dark' : 'danger';
+                        const bookingDate = new Date(r.datetime || (r.date + 'T' + (r.time || '00:00')));
+                        const displayDate = bookingDate.toLocaleDateString('pt-PT');
+                        const displayTime = bookingDate.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+                        const displayCourt = r.courtId || r.court || 'Campo';
+                        const displayPrice = Number(r.price || 0);
                         
                         html += `
                             <div class="col-12">
@@ -136,8 +141,9 @@
                                     <div class="card-body">
                                         <div class="row align-items-start">
                                             <div class="col">
-                                                <h6 class="mb-1">🏸 ${r.court || 'Campo'}</h6>
-                                                <small class="text-secondary">${displayDate} - ${r.time || '00:00'}</small>
+                                                <h6 class="mb-1">🏸 ${displayCourt}</h6>
+                                                <small class="text-secondary">${displayDate} - ${displayTime}</small>
+                                                <div class="text-padel small fw-bold mt-1">${displayPrice}€</div>
                                             </div>
                                             <div class="col-auto">
                                                 <span class="badge bg-${statusColor}">${status}</span>
@@ -151,11 +157,50 @@
                     html += '</div>';
                 }
 
+                if (notAdmitted.length > 0) {
+                    html += '<h6 class="text-warning mb-3"><i class="bi bi-exclamation-triangle"></i> Reserva Não Admitida</h6>';
+                    html += '<div class="row g-3 mb-4">';
+                    notAdmitted.forEach(r => {
+                        const bookingDate = new Date(r.datetime || (r.date + 'T' + (r.time || '00:00')));
+                        const displayDate = bookingDate.toLocaleDateString('pt-PT');
+                        const displayTime = bookingDate.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+                        const displayCourt = r.courtId || r.court || 'Campo';
+                        const displayPrice = Number(r.price || 0);
+                        
+                        html += `
+                            <div class="col-12">
+                                <div class="card card-custom opacity-75 border border-warning">
+                                    <div class="card-body">
+                                        <div class="row align-items-start">
+                                            <div class="col">
+                                                <h6 class="mb-1 text-secondary">\uD83C\uDFF8 ${displayCourt}</h6>
+                                                <small class="text-secondary">${displayDate} - ${displayTime}</small>
+                                                <div class="text-padel small fw-bold mt-1">${displayPrice}\u20AC</div>
+                                            </div>
+                                            <div class="col-auto">
+                                                <span class="badge bg-dark text-warning border border-warning">Não Admitida</span>
+                                            </div>
+                                        </div>
+                                        <div class="mt-2">
+                                            <small class="text-warning"><i class="bi bi-exclamation-triangle"></i> Esta reserva não foi aprovada a tempo pelo administrador.</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+                }
+
                 if (rejected.length > 0) {
                     html += '<h6 class="text-secondary mb-3">Recusadas</h6>';
                     html += '<div class="row g-3">';
                     rejected.forEach(r => {
-                        const displayDate = new Date(r.date + 'T12:00:00').toLocaleDateString('pt-PT');
+                        const bookingDate = new Date(r.datetime || (r.date + 'T' + (r.time || '00:00')));
+                        const displayDate = bookingDate.toLocaleDateString('pt-PT');
+                        const displayTime = bookingDate.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+                        const displayCourt = r.courtId || r.court || 'Campo';
+                        const displayPrice = Number(r.price || 0);
                         
                         html += `
                             <div class="col-12">
@@ -163,8 +208,9 @@
                                     <div class="card-body">
                                         <div class="row align-items-start">
                                             <div class="col">
-                                                <h6 class="mb-1 text-secondary">🏸 ${r.court || 'Campo'}</h6>
-                                                <small class="text-secondary">${displayDate} - ${r.time || '00:00'}</small>
+                                                <h6 class="mb-1 text-secondary">🏸 ${displayCourt}</h6>
+                                                <small class="text-secondary">${displayDate} - ${displayTime}</small>
+                                                <div class="text-padel small fw-bold mt-1">${displayPrice}€</div>
                                             </div>
                                             <div class="col-auto">
                                                 <span class="badge bg-danger">Recusada</span>

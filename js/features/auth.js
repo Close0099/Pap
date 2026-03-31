@@ -6,6 +6,32 @@ import { doc, setDoc, getDoc, collection, query, where, getDocs } from "https://
 const loginForm = document.querySelector('#login-form form');
 const registerForm = document.querySelector('#register-form form');
 const resetPasswordForm = document.getElementById('reset-password-form');
+const captchaQuestionEl = document.getElementById('register-captcha-question');
+const captchaAnswerEl = document.getElementById('register-captcha-answer');
+const refreshCaptchaBtn = document.getElementById('refresh-captcha-btn');
+const registerTermsEl = document.getElementById('register-terms');
+
+let captchaExpectedResult = null;
+
+function generateRegisterCaptcha() {
+    const n1 = Math.floor(Math.random() * 8) + 1;
+    const n2 = Math.floor(Math.random() * 8) + 1;
+    captchaExpectedResult = n1 + n2;
+    if (captchaQuestionEl) {
+        captchaQuestionEl.textContent = `${n1} + ${n2} = ?`;
+    }
+    if (captchaAnswerEl) {
+        captchaAnswerEl.value = '';
+    }
+}
+
+if (refreshCaptchaBtn) {
+    refreshCaptchaBtn.addEventListener('click', generateRegisterCaptcha);
+}
+
+if (captchaQuestionEl) {
+    generateRegisterCaptcha();
+}
 
 async function redirectByUserRole(user) {
     try {
@@ -42,6 +68,28 @@ if (registerForm) {
         const email = document.getElementById('register-email').value;
         const password = document.getElementById('register-password').value;
         const btn = registerForm.querySelector('button');
+        const captchaValue = Number(captchaAnswerEl?.value);
+        const acceptedTerms = Boolean(registerTermsEl?.checked);
+
+        if (!acceptedTerms) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Termos obrigatorios',
+                text: 'Precisa aceitar os Termos e Condicoes para criar conta.'
+            });
+            return;
+        }
+
+        if (!Number.isFinite(captchaValue) || captchaValue !== captchaExpectedResult) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Captcha invalido',
+                text: 'Resposta do captcha incorreta. Tente novamente.'
+            });
+            generateRegisterCaptcha();
+            captchaAnswerEl?.focus();
+            return;
+        }
 
         try {
             btn.textContent = 'A criar conta...';
@@ -72,6 +120,7 @@ if (registerForm) {
                 timer: 2000,
                 showConfirmButton: false
             });
+            generateRegisterCaptcha();
             await redirectByUserRole(user);
 
         } catch (error) {
@@ -85,6 +134,7 @@ if (registerForm) {
                 title: 'Erro',
                 text: msg
             });
+            generateRegisterCaptcha();
             btn.textContent = 'Criar Conta';
             btn.disabled = false;
         }

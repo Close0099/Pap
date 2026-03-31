@@ -20,6 +20,147 @@ let currentUser = null;
 let activityChart = null;
 let courtChart = null;
 
+const DEFAULT_PRICING = {
+    courts: {
+        'Campo 1': 20,
+        'Campo 2': 20,
+        'Campo 3': 15
+    },
+    eveningStartHour: 18,
+    eveningSurcharge: 5
+};
+
+let pricingSettings = { ...DEFAULT_PRICING, courts: { ...DEFAULT_PRICING.courts } };
+
+function mergePricingSettings(data = {}) {
+    const courts = data.courts || {};
+    return {
+        courts: {
+            'Campo 1': Number(courts['Campo 1']) || DEFAULT_PRICING.courts['Campo 1'],
+            'Campo 2': Number(courts['Campo 2']) || DEFAULT_PRICING.courts['Campo 2'],
+            'Campo 3': Number(courts['Campo 3']) || DEFAULT_PRICING.courts['Campo 3']
+        },
+        eveningStartHour: Number.isFinite(Number(data.eveningStartHour)) ? Number(data.eveningStartHour) : DEFAULT_PRICING.eveningStartHour,
+        eveningSurcharge: Number.isFinite(Number(data.eveningSurcharge)) ? Number(data.eveningSurcharge) : DEFAULT_PRICING.eveningSurcharge
+    };
+}
+
+async function loadPricingSettings() {
+    try {
+        const pricingDoc = await getDoc(doc(db, 'settings', 'pricing'));
+        if (pricingDoc.exists()) {
+            pricingSettings = mergePricingSettings(pricingDoc.data());
+        }
+    } catch (error) {
+        console.error('Erro ao carregar configurações de preço, usando padrão:', error);
+    }
+}
+
+function calculateBookingPrice(court, time) {
+    const hour = Number((time || '00:00').split(':')[0]);
+    const base = Number(pricingSettings.courts[court] || 0);
+    const surcharge = hour >= Number(pricingSettings.eveningStartHour) ? Number(pricingSettings.eveningSurcharge || 0) : 0;
+    return base + surcharge;
+}
+
+async function getCurrentUserBlockState() {
+    if (!currentUser?.uid) {
+        return { isBlocked: false, message: '' };
+    }
+
+    try {
+        const userSnap = await getDoc(doc(db, 'users', currentUser.uid));
+        if (!userSnap.exists()) {
+            return { isBlocked: false, message: '' };
+        }
+
+        const userData = userSnap.data() || {};
+        return {
+            isBlocked: userData.isBlocked === true,
+            message: String(userData.blockMessage || '').trim()
+        };
+    } catch (error) {
+        console.error('Erro ao validar estado de bloqueio:', error);
+        throw error;
+    }
+}
+
+async function logClientActivity(action, details, meta = {}) {
+    if (!currentUser) return;
+
+    try {
+        const userSnap = await getDoc(doc(db, 'users', currentUser.uid));
+        const userData = userSnap.exists() ? userSnap.data() : {};
+        const actorName = userData.name || currentUser.email?.split('@')[0] || 'Cliente';
+        const actorIsAdmin = userData.isAdmin === true || userData.role === 'admin';
+
+        await addDoc(collection(db, 'activityLogs'), {
+            action,
+            details: details || '',
+            targetType: meta.targetType || '',
+            targetId: meta.targetId || '',
+            actorId: currentUser.uid,
+            actorEmail: currentUser.email || '',
+            actorName,
+            actorRole: actorIsAdmin ? 'admin' : 'client',
+            actorIsAdmin,
+            source: 'client-dashboard',
+            timestamp: new Date()
+        });
+    } catch (error) {
+        console.error('Falha ao gravar log do cliente:', error);
+    }
+}
+
+async function sendTelegramBookingNotification(payload = {}) {
+    const botToken = window.APP_TELEGRAM_BOT_TOKEN || '';
+    const chatId = window.APP_TELEGRAM_CHAT_ID || '';
+
+    if (!botToken || !chatId) {
+        return;
+    }
+
+    const adminUrl = `${window.location.origin}/admin-dashboard.html`;
+
+    const lines = [
+        'Nova reserva recebida',
+        `Campo: ${payload.courtId || '-'}`,
+        `Data/Hora: ${payload.datetime || '-'}`,
+        `Preco: ${Number(payload.price || 0)} EUR`,
+        `Cliente: ${payload.userEmail || '-'}`,
+        `Origem: ${payload.origin || 'dashboard'}`,
+        `Admin: ${adminUrl}`
+    ];
+
+    const text = lines.join('\n');
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+        const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            signal: controller.signal,
+            body: JSON.stringify({
+                chat_id: chatId,
+                text
+            })
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            const body = await response.text();
+            throw new Error(`Telegram HTTP ${response.status}: ${body}`);
+        }
+    } catch (error) {
+        console.warn('Falha ao enviar notificação Telegram:', error);
+    }
+}
+
 // 1. Verificar Autenticação
 onAuthStateChanged(auth, async (user) => {
     if (user) {
@@ -40,6 +181,7 @@ onAuthStateChanged(auth, async (user) => {
             userNameSpan.textContent = user.email;
         }
 
+        await loadPricingSettings();
         loadUserBookings(user.uid);
     } else {
         window.location.href = 'index.html';
@@ -240,6 +382,7 @@ function renderBooking(data, container, isUpcoming) {
     
     const dateStr = data.dateObj.toLocaleDateString('pt-PT', { day: '2-digit', month: 'long', year: 'numeric' });
     const timeStr = data.dateObj.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+    const bookingPrice = Number(data.price || 0);
 
     let badgeClass = 'bg-secondary';
     let statusText = data.status;
@@ -285,6 +428,9 @@ function renderBooking(data, container, isUpcoming) {
                 <div class="text-secondary small">
                     <i class="bi bi-calendar-event me-1"></i> ${dateStr} 
                     <i class="bi bi-clock ms-2 me-1"></i> ${timeStr}
+                </div>
+                <div class="text-padel small fw-bold mt-1">
+                    <i class="bi bi-currency-euro me-1"></i> ${bookingPrice}€
                 </div>
             </div>
             <div class="d-flex align-items-center">
@@ -334,6 +480,12 @@ window.cancelBooking = async (bookingId) => {
                 cancelledAt: new Date(),
                 cancelledBy: currentUser.uid
             });
+
+            await logClientActivity(
+                'Cancelou reserva',
+                `${bookingData.courtId} em ${bookingData.datetime}`,
+                { targetType: 'reserva', targetId: bookingId }
+            );
             
             // Criar notificação de cancelamento para o admin
             await addDoc(collection(db, "cancellationNotifications"), {
@@ -539,7 +691,8 @@ async function loadTimeSlots() {
                 const [h, m] = time.split(':').map(Number);
                 const slotDate = new Date();
                 slotDate.setHours(h, m, 0, 0);
-                if (slotDate < now) isPast = true;
+                const limit = new Date(now.getTime() + 30 * 60 * 1000);
+                if (slotDate <= limit) isPast = true;
             }
 
             const isDisabled = isTaken || isPast;
@@ -589,9 +742,6 @@ function selectTime(btn, time) {
     selectedTimeInput.value = time;
     confirmBtn.disabled = false;
 
-    // Mostrar opção de recurso após selecionar hora
-    document.getElementById('recurring-container').classList.remove('d-none');
-
     updatePrice(time);
 }
 
@@ -599,18 +749,7 @@ function updatePrice(time) {
     if (!priceContainer || !priceDisplay) return;
 
     const court = courtSelect.value;
-    let basePrice = 20; // Indoor Default
-    
-    // Regra 1: Outdoor é mais barato
-    if (court === 'Campo 3') {
-        basePrice = 15;
-    }
-
-    // Regra 2: Horário Nobre (+18h) é mais caro
-    const hour = parseInt(time.split(':')[0]);
-    if (hour >= 18) {
-        basePrice += 5;
-    }
+    const basePrice = calculateBookingPrice(court, time);
 
     priceDisplay.textContent = `${basePrice}€`;
     priceContainer.classList.remove('d-none');
@@ -622,6 +761,22 @@ if (bookingForm) {
         e.preventDefault();
         
         if (!currentUser) return;
+
+        try {
+            const blockState = await getCurrentUserBlockState();
+            if (blockState.isBlocked) {
+                const adminMessage = blockState.message || 'A tua conta encontra-se bloqueada. Contacta o administrador para mais detalhes.';
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Conta bloqueada',
+                    html: `<p>${adminMessage}</p>`
+                });
+                return;
+            }
+        } catch (validationError) {
+            Swal.fire('Erro', 'Não foi possível validar o estado da conta. Tenta novamente.', 'error');
+            return;
+        }
 
         const dateVal = datePicker.value;
         const timeVal = selectedTimeInput.value;
@@ -636,9 +791,7 @@ if (bookingForm) {
         const finalDateTime = `${dateVal}T${timeVal}`;
         
         // Calcular Preço Final para guardar
-        let finalPrice = 20;
-        if (courtVal === 'Campo 3') finalPrice = 15;
-        if (parseInt(timeVal.split(':')[0]) >= 18) finalPrice += 5;
+        const finalPrice = calculateBookingPrice(courtVal, timeVal);
 
         // CONFIRMAÇÃO ANTES DE RESERVAR
         const result = await Swal.fire({
@@ -681,18 +834,30 @@ if (bookingForm) {
                 throw new Error("SLOT_NOW_TAKEN");
             }
 
-            const isRecurring = document.getElementById('recurring-checkbox').checked;
-            
-            await addDoc(collection(db, "reservas"), {
+            const reservationRef = await addDoc(collection(db, "reservas"), {
                 userId: currentUser.uid,
                 userEmail: currentUser.email,
                 datetime: finalDateTime,
                 courtId: courtVal,
                 price: finalPrice,
                 status: "Pendente",
-                recurring: isRecurring,
                 timestamp: new Date()
             });
+
+            await sendTelegramBookingNotification({
+                bookingId: reservationRef.id,
+                userEmail: currentUser.email,
+                datetime: finalDateTime,
+                courtId: courtVal,
+                price: finalPrice,
+                origin: 'dashboard-main-form'
+            });
+
+            await logClientActivity(
+                'Criou reserva',
+                `${courtVal} em ${finalDateTime} (${finalPrice}EUR)`,
+                { targetType: 'reserva', targetId: finalDateTime }
+            );
 
             Swal.fire({
                 icon: 'success',
@@ -709,7 +874,6 @@ if (bookingForm) {
             selectedTimeInput.value = '';
             confirmBtn.textContent = "Confirmar Reserva";
             confirmBtn.disabled = true;
-            document.getElementById('recurring-checkbox').checked = false;
             loadTimeSlots();
 
         } catch (error) {
@@ -966,3 +1130,228 @@ async function markAllAsRead(unreadMessages) {
 setTimeout(() => {
     checkUnreadMessages();
 }, 2000);
+
+// ============================================
+// SISTEMA DE AVALIAÇÃO PÓS-RESERVA
+// ============================================
+
+async function checkPendingEvaluations() {
+    if (!currentUser) return;
+
+    try {
+        const now = new Date();
+
+        // Buscar reservas aprovadas do utilizador
+        const qApproved = query(
+            collection(db, 'reservas'),
+            where('userId', '==', currentUser.uid),
+            where('status', '==', 'Aprovado')
+        );
+
+        const snapshot = await getDocs(qApproved);
+        const pendingEvals = [];
+
+        snapshot.forEach(docSnap => {
+            const data = docSnap.data();
+            const bookingDate = new Date(data.datetime);
+            // Só reservas que já passaram e que ainda não foram avaliadas
+            if (bookingDate < now && !data.evaluated) {
+                pendingEvals.push({ id: docSnap.id, ...data });
+            }
+        });
+
+        // Ordenar por data (mais antiga primeiro)
+        pendingEvals.sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
+
+        // Mostrar avaliação uma a uma
+        for (const booking of pendingEvals) {
+            await showEvaluationModal(booking);
+        }
+    } catch (error) {
+        console.error('Erro ao verificar avaliações pendentes:', error);
+    }
+}
+
+async function showEvaluationModal(booking) {
+    const dateObj = new Date(booking.datetime);
+    const dateStr = dateObj.toLocaleDateString('pt-PT', { day: '2-digit', month: 'long', year: 'numeric' });
+    const timeStr = dateObj.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+    const price = Number(booking.price || 0);
+
+    const result = await Swal.fire({
+        title: 'Avalia o teu jogo',
+        html: `
+            <div class="text-start mb-4">
+                <div class="card bg-dark border-secondary mb-3">
+                    <div class="card-body py-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong class="text-white">🏸 ${booking.courtId || 'Campo'}</strong>
+                                <div class="text-secondary small">${dateStr} às ${timeStr}</div>
+                            </div>
+                            <span class="text-warning fw-bold">${price}€</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <p class="text-secondary mb-2" style="font-size: 0.9rem;">Como avalias o serviço?</p>
+            <div class="star-rating mb-4" id="swal-star-rating">
+                <input type="radio" name="rating" value="5" id="star5"><label for="star5"><i class="bi bi-star-fill"></i></label>
+                <input type="radio" name="rating" value="4" id="star4"><label for="star4"><i class="bi bi-star-fill"></i></label>
+                <input type="radio" name="rating" value="3" id="star3"><label for="star3"><i class="bi bi-star-fill"></i></label>
+                <input type="radio" name="rating" value="2" id="star2"><label for="star2"><i class="bi bi-star-fill"></i></label>
+                <input type="radio" name="rating" value="1" id="star1"><label for="star1"><i class="bi bi-star-fill"></i></label>
+            </div>
+
+            <p class="text-secondary mb-2" style="font-size: 0.9rem;">Método de pagamento utilizado:</p>
+            <div class="d-flex gap-2 justify-content-center" id="swal-payment-method">
+                <div class="payment-option border border-secondary rounded p-2 px-3 text-center" data-method="Dinheiro" style="min-width: 90px;">
+                    <i class="bi bi-cash-stack d-block fs-4 text-success"></i>
+                    <small class="text-white">Dinheiro</small>
+                </div>
+                <div class="payment-option border border-secondary rounded p-2 px-3 text-center" data-method="MBway" style="min-width: 90px;">
+                    <i class="bi bi-phone d-block fs-4 text-info"></i>
+                    <small class="text-white">MBway</small>
+                </div>
+                <div class="payment-option border border-secondary rounded p-2 px-3 text-center" data-method="Cartão" style="min-width: 90px;">
+                    <i class="bi bi-credit-card d-block fs-4 text-warning"></i>
+                    <small class="text-white">Cartão</small>
+                </div>
+            </div>
+
+            <div class="form-check mt-4 text-start">
+                <input class="form-check-input" type="checkbox" value="1" id="swal-no-show">
+                <label class="form-check-label text-warning" for="swal-no-show">
+                    Não compareci
+                </label>
+                <div class="text-secondary small">Se selecionares esta opção, não precisas de indicar avaliação nem pagamento.</div>
+            </div>
+        `,
+        confirmButtonText: 'Enviar Avaliação',
+        confirmButtonColor: '#84cc16',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showCancelButton: false,
+        didOpen: () => {
+            // Payment method selection
+            const options = Swal.getPopup().querySelectorAll('.payment-option');
+            options.forEach(opt => {
+                opt.addEventListener('click', () => {
+                    options.forEach(o => o.classList.remove('active'));
+                    opt.classList.add('active');
+                });
+            });
+
+            const noShowCheckbox = Swal.getPopup().querySelector('#swal-no-show');
+            const ratingInputs = Swal.getPopup().querySelectorAll('input[name="rating"]');
+            const paymentOptions = Swal.getPopup().querySelectorAll('.payment-option');
+
+            if (noShowCheckbox) {
+                noShowCheckbox.addEventListener('change', () => {
+                    const isNoShow = noShowCheckbox.checked;
+
+                    ratingInputs.forEach(input => {
+                        input.disabled = isNoShow;
+                        if (isNoShow) input.checked = false;
+                    });
+
+                    paymentOptions.forEach(option => {
+                        option.classList.toggle('opacity-50', isNoShow);
+                        option.style.pointerEvents = isNoShow ? 'none' : 'auto';
+                        if (isNoShow) option.classList.remove('active');
+                    });
+                });
+            }
+        },
+        preConfirm: () => {
+            const noShowCheckbox = Swal.getPopup().querySelector('#swal-no-show');
+            const isNoShow = noShowCheckbox?.checked === true;
+
+            if (isNoShow) {
+                return {
+                    noShow: true,
+                    rating: null,
+                    paymentMethod: 'Não compareci'
+                };
+            }
+
+            const selectedStar = Swal.getPopup().querySelector('input[name="rating"]:checked');
+            const selectedPayment = Swal.getPopup().querySelector('.payment-option.active');
+
+            if (!selectedStar) {
+                Swal.showValidationMessage('Seleciona uma avaliação de 1 a 5 estrelas.');
+                return false;
+            }
+            if (!selectedPayment) {
+                Swal.showValidationMessage('Seleciona o método de pagamento utilizado.');
+                return false;
+            }
+
+            return {
+                noShow: false,
+                rating: Number(selectedStar.value),
+                paymentMethod: selectedPayment.getAttribute('data-method')
+            };
+        }
+    });
+
+    if (result.isConfirmed && result.value) {
+        try {
+            const isNoShow = result.value.noShow === true;
+
+            // Guardar avaliação na reserva
+            await updateDoc(doc(db, 'reservas', booking.id), {
+                evaluated: true,
+                rating: result.value.rating,
+                paymentMethod: result.value.paymentMethod,
+                noShow: isNoShow,
+                noShowDeclaredAt: isNoShow ? new Date() : null,
+                evaluatedAt: new Date()
+            });
+
+            // Guardar também na coleção de avaliações para o admin consultar
+            await addDoc(collection(db, 'evaluations'), {
+                bookingId: booking.id,
+                userId: currentUser.uid,
+                userEmail: currentUser.email,
+                courtId: booking.courtId,
+                datetime: booking.datetime,
+                price: booking.price,
+                rating: result.value.rating,
+                paymentMethod: result.value.paymentMethod,
+                noShow: isNoShow,
+                createdAt: new Date()
+            });
+
+            if (isNoShow) {
+                await logClientActivity(
+                    'Indicou falta à reserva',
+                    `${booking.courtId} em ${booking.datetime} — Não compareceu`,
+                    { targetType: 'evaluation', targetId: booking.id }
+                );
+            } else {
+                await logClientActivity(
+                    'Avaliou reserva',
+                    `${booking.courtId} em ${booking.datetime} — ${result.value.rating}★, pagamento: ${result.value.paymentMethod}`,
+                    { targetType: 'evaluation', targetId: booking.id }
+                );
+            }
+
+            Swal.fire({
+                icon: 'success',
+                title: isNoShow ? 'Registo efetuado' : 'Obrigado!',
+                text: isNoShow ? 'A falta foi registada com sucesso.' : 'A tua avaliação foi registada.',
+                timer: 1800,
+                showConfirmButton: false
+            });
+        } catch (error) {
+            console.error('Erro ao guardar avaliação:', error);
+        }
+    }
+}
+
+// Verificar avaliações pendentes após carregar a página
+setTimeout(() => {
+    checkPendingEvaluations();
+}, 3000);

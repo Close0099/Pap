@@ -33,6 +33,20 @@
       ]
     },
     {
+      "collectionGroup": "reservas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "datetime",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "cancellationNotifications",
       "queryScope": "COLLECTION",
       "fields": [

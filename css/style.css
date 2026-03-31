@@ -205,6 +205,46 @@ body {
     color: var(--padel-green);
 }
 
+/* Star Rating */
+.star-rating {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    direction: rtl;
+}
+
+.star-rating input {
+    display: none;
+}
+
+.star-rating label {
+    font-size: 2.5rem;
+    color: #475569;
+    cursor: pointer;
+    transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.star-rating label:hover,
+.star-rating label:hover ~ label,
+.star-rating input:checked ~ label {
+    color: #facc15;
+    transform: scale(1.15);
+}
+
+.payment-option {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.payment-option:hover {
+    border-color: var(--padel-green) !important;
+}
+
+.payment-option.active {
+    border-color: var(--padel-green) !important;
+    background-color: rgba(132, 204, 22, 0.1) !important;
+}
+
 .bg-padel {
     background-color: var(--padel-green);
     color: black;
@@ -242,6 +282,70 @@ body {
 .navbar-admin {
     background-color: rgba(30, 41, 59, 0.95);
     border-bottom: 1px solid #334155;
+}
+
+/* Promo marquee */
+.promo-marquee {
+    background: linear-gradient(90deg, #facc15 0%, #f97316 45%, #ef4444 100%);
+    border-top: 2px solid rgba(255, 255, 255, 0.35);
+    border-bottom: 2px solid rgba(15, 23, 42, 0.45);
+    box-shadow: 0 0 24px rgba(249, 115, 22, 0.45);
+    overflow: hidden;
+    white-space: nowrap;
+    min-height: 92px;
+    display: flex;
+    align-items: center;
+}
+
+.promo-marquee-track {
+    display: inline-flex;
+    align-items: center;
+    gap: 1.1rem;
+    min-width: 200%;
+    padding: 0.95rem 0;
+    color: #ffffff;
+    font-weight: 900;
+    font-size: 2rem;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45), 0 0 12px rgba(255, 255, 255, 0.25);
+    animation: promo-marquee-scroll 10s linear infinite;
+}
+
+.promo-marquee-track span {
+    flex: 0 0 auto;
+    padding: 0.35rem 1.1rem;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.32);
+}
+
+@keyframes promo-marquee-scroll {
+    from {
+        transform: translateX(0);
+    }
+    to {
+        transform: translateX(-50%);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .promo-marquee-track {
+        animation: none;
+        min-width: 100%;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 768px) {
+    .promo-marquee {
+        min-height: 76px;
+    }
+
+    .promo-marquee-track {
+        font-size: 1.45rem;
+        letter-spacing: 0.12em;
+    }
 }
 
 /* Cards */
@@ -584,6 +688,42 @@ body {
 
 .bg-slot-blocked { background-color: #475569; border-left: 3px solid #94a3b8; color: #cbd5e1; }
 
+/* Ajustes dedicados ao mapa de ocupação do admin */
+#sec-map .card.card-custom {
+    overflow-x: auto;
+}
+
+#sec-map .calendar-grid {
+    grid-template-columns: 72px repeat(3, minmax(110px, 1fr));
+    min-width: 420px;
+}
+
+#sec-map .calendar-header-cell {
+    padding: 8px 6px;
+    font-size: 0.8rem;
+    line-height: 1.2;
+}
+
+#sec-map .calendar-time-cell {
+    font-size: 0.78rem;
+    padding: 8px 4px;
+}
+
+#sec-map .calendar-slot {
+    min-height: 54px;
+    padding: 4px;
+}
+
+#sec-map .calendar-booking {
+    font-size: 0.68rem;
+    line-height: 1.25;
+    white-space: normal;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+}
+
 /* ===== UPGRADES DE PRIORIDADE ALTA ===== */
 
 /* 1. RESPONSIVIDADE MOBILE */
@@ -627,6 +767,16 @@ body {
         min-height: 45px;
         padding: 3px;
     }
+
+    #sec-map .calendar-grid {
+        grid-template-columns: 64px repeat(3, 110px) !important;
+        min-width: 394px;
+        font-size: 0.76rem;
+    }
+
+    #sec-map .calendar-slot {
+        min-height: 50px;
+    }
 }
 
 @media (max-width: 992px) {
@@ -637,6 +787,11 @@ body {
     
     .calendar-slot {
         min-height: 50px;
+    }
+
+    #sec-map .calendar-grid {
+        grid-template-columns: 68px repeat(3, minmax(110px, 1fr)) !important;
+        min-width: 410px;
     }
 }
 

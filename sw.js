@@ -1,31 +1,41 @@
 // Service Worker para SmashLab PWA
-const CACHE_NAME = 'padel-club-v3-feb-13-2026-loader';
+const CACHE_NAME = 'padel-club-v6-mar-20-2026-admin-reports-fix';
 const URLS_TO_CACHE = [
   '/',
   '/index.html',
   '/dashboard.html',
   '/admin-dashboard.html',
+  '/pages/dashboard.html',
+  '/pages/admin-dashboard.html',
   '/profile.html',
   '/user-management.html',
   '/css/style.css',
-  '/js/firebase-config.js',
-  '/js/auth.js',
-  '/js/dashboard.js',
-  '/js/admin-dashboard.js',
-  '/js/profile.js',
-  '/js/user-management.js',
-  '/js/notifications.js',
-  '/js/export-system.js',
+  '/js/core/firebase-config.js',
+  '/js/features/auth.js',
+  '/js/features/dashboard.js',
+  '/js/features/admin-dashboard.js',
+  '/js/features/profile.js',
+  '/js/features/user-management.js',
+  '/js/shared/notifications.js',
+  '/js/shared/export-system.js',
   '/manifest.json'
 ];
 
 // Instalar Service Worker
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(URLS_TO_CACHE).catch(err => {
-        console.log('Erro ao cachear recursos:', err);
-      });
+    caches.open(CACHE_NAME).then(async cache => {
+      const results = await Promise.allSettled(
+        URLS_TO_CACHE.map(url => cache.add(url))
+      );
+
+      const failed = results
+        .map((result, index) => ({ result, url: URLS_TO_CACHE[index] }))
+        .filter(item => item.result.status === 'rejected');
+
+      if (failed.length > 0) {
+        console.warn('Alguns recursos não foram cacheados:', failed.map(item => item.url));
+      }
     })
   );
   self.skipWaiting();
@@ -56,6 +66,13 @@ self.addEventListener('message', event => {
 
 // Estratégia: Network First (tenta rede primeiro, depois cache)
 self.addEventListener('fetch', event => {
+  const requestUrl = new URL(event.request.url);
+
+  // Ignorar esquemas que o Cache API não suporta (ex: chrome-extension:)
+  if (!['http:', 'https:'].includes(requestUrl.protocol)) {
+    return;
+  }
+
   // Não cachear requisições para APIs externas
   if (event.request.url.includes('firebasejs') || 
       event.request.url.includes('firebase') ||
@@ -68,7 +85,15 @@ self.addEventListener('fetch', event => {
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request, { cache: 'no-store' })
-        .catch(() => caches.match('/index.html'))
+        .catch(() =>
+          caches.match('/index.html').then(cached => {
+            if (cached) return cached;
+            return new Response('Offline', {
+              status: 503,
+              headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+            });
+          })
+        )
     );
     return;
   }
@@ -89,7 +114,10 @@ self.addEventListener('fetch', event => {
       })
       .catch(() => {
         // Se falhar, tentar cache
-        return caches.match(event.request);
+        return caches.match(event.request).then(cached => {
+          if (cached) return cached;
+          return Response.error();
+        });
       })
   );
 });

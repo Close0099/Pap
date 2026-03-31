@@ -4,6 +4,11 @@ import { collection, query, where, getDocs, doc, getDoc, updateDoc, setDoc, dele
 
 const usersList = document.getElementById('users-list');
 const createUserForm = document.getElementById('create-user-form');
+const PROTECTED_ADMIN_EMAIL = (window.APP_PROTECTED_ADMIN_EMAIL || '').trim().toLowerCase();
+
+function isProtectedAccount(email = '') {
+    return !!PROTECTED_ADMIN_EMAIL && String(email).toLowerCase() === PROTECTED_ADMIN_EMAIL;
+}
 
 // Flag para bloquear redirecionamentos durante criação
 let isCreatingUser = false;
@@ -42,6 +47,15 @@ let allUsers = [];
 let unsubscribeUsers = null;
 let unsubscribeReservas = null;
 let pollingInterval = null;
+let reservasStatsByUser = {};
+
+function applyReservationStatsToUsers(users) {
+    users.forEach(user => {
+        const stats = reservasStatsByUser[user.id] || { totalReservas: 0, totalNoShows: 0 };
+        user.totalReservas = stats.totalReservas;
+        user.totalNoShows = stats.totalNoShows;
+    });
+}
 
 function loadUsers() {
     // Limpar listeners e polling anteriores
@@ -61,19 +75,27 @@ function loadUsers() {
     try {
         // Listener para mudanças nas reservas
         unsubscribeReservas = onSnapshot(qReservas, (reservasSnapshot) => {
-            
-            // Contar reservas por utilizador
-            const reservasPorUser = {};
+            // Contar reservas e faltas (no-show) por utilizador
+            const statsByUser = {};
             reservasSnapshot.forEach(doc => {
                 const reserva = doc.data();
                 const userId = reserva.userId;
-                reservasPorUser[userId] = (reservasPorUser[userId] || 0) + 1;
+                if (!statsByUser[userId]) {
+                    statsByUser[userId] = { totalReservas: 0, totalNoShows: 0 };
+                }
+
+                statsByUser[userId].totalReservas += 1;
+
+                const isNoShow = reserva.noShow === true || reserva.paymentMethod === 'Não compareci';
+                if (isNoShow) {
+                    statsByUser[userId].totalNoShows += 1;
+                }
             });
 
+            reservasStatsByUser = statsByUser;
+
             // Atualizar contagem nas linhas existentes
-            allUsers.forEach(user => {
-                user.totalReservas = reservasPorUser[user.id] || 0;
-            });
+            applyReservationStatsToUsers(allUsers);
 
             // Renderizar novamente
             renderUsersList(allUsers);
@@ -88,15 +110,17 @@ function loadUsers() {
             allUsers = [];
             
             if (snapshot.empty) {
-                usersList.innerHTML = '<tr><td colspan="8" class="text-center py-3 text-secondary">Nenhum utilizador encontrado.</td></tr>';
+                usersList.innerHTML = '<tr><td colspan="9" class="text-center py-3 text-secondary">Nenhum utilizador encontrado.</td></tr>';
                 return;
             }
 
             snapshot.forEach(doc => {
                 const userData = doc.data();
                 const userId = doc.id;
-                allUsers.push({ id: userId, ...userData, totalReservas: 0 });
+                allUsers.push({ id: userId, ...userData, totalReservas: 0, totalNoShows: 0 });
             });
+
+            applyReservationStatsToUsers(allUsers);
 
             renderUsersList(allUsers);
         }, (error) => {
@@ -118,6 +142,7 @@ function loadUsers() {
                     });
                     allUsers = newUsers;
                     lastCount = snapshot.size;
+                    applyReservationStatsToUsers(allUsers);
                     renderUsersList(allUsers);
                 }
             } catch (error) {
@@ -129,7 +154,7 @@ function loadUsers() {
 
     } catch (error) {
         console.error('Erro ao carregar utilizadores:', error);
-        usersList.innerHTML = '<tr><td colspan="8" class="text-center py-3 text-danger">Erro ao carregar utilizadores.</td></tr>';
+        usersList.innerHTML = '<tr><td colspan="9" class="text-center py-3 text-danger">Erro ao carregar utilizadores.</td></tr>';
     }
 }
 
@@ -150,6 +175,7 @@ function createUserRow(user) {
     
     const isAdmin = user.isAdmin === true || user.role === 'admin';
     const totalReservas = user.totalReservas || 0;
+    const totalNoShows = user.totalNoShows || 0;
     const isBlocked = user.isBlocked === true;
     const messageCount = user.unreadMessages || 0;
 
@@ -162,6 +188,11 @@ function createUserRow(user) {
             </span>
         </td>
         <td class="text-white">${totalReservas}</td>
+        <td>
+            <span class="badge ${totalNoShows > 0 ? 'bg-warning text-dark' : 'bg-secondary'}">
+                ${totalNoShows}
+            </span>
+        </td>
         <td>
             <span class="badge ${isBlocked ? 'bg-danger' : 'bg-success'}">
                 ${isBlocked ? 'Bloqueado' : 'Ativo'}
@@ -179,7 +210,7 @@ function createUserRow(user) {
             </button>
         </td>
         <td class="d-flex gap-2">
-            ${user.email !== 'lmesteves08@gmail.com' ? `
+            ${!isProtectedAccount(user.email) ? `
                 <button class="btn btn-sm btn-outline-warning" onclick="toggleAdminStatus('${user.id}', ${isAdmin})" title="${isAdmin ? 'Remover Admin' : 'Tornar Admin'}">
                     <i class="bi bi-shield-${isAdmin ? 'slash' : 'lock'}"></i>
                 </button>
@@ -190,7 +221,7 @@ function createUserRow(user) {
             <button class="btn btn-sm btn-outline-danger" onclick="toggleBlockUser('${user.id}', ${isBlocked})" title="${isBlocked ? 'Desbloquear' : 'Bloquear'}">
                 <i class="bi ${isBlocked ? 'bi-unlock' : 'bi-lock'}"></i>
             </button>
-            ${user.email !== 'lmesteves08@gmail.com' ? `
+            ${!isProtectedAccount(user.email) ? `
                 <button class="btn btn-sm btn-outline-danger" onclick="deleteUser('${user.id}')" title="Eliminar">
                     <i class="bi bi-trash"></i>
                 </button>
@@ -294,7 +325,7 @@ window.toggleAdminStatus = async (userId, isCurrentAdmin) => {
     const userDoc = await getDoc(doc(db, "users", userId));
     const userData = userDoc.data();
     
-    if (userData.email === 'lmesteves08@gmail.com') {
+    if (isProtectedAccount(userData.email)) {
         if (window.Notification) {
             window.Notification.error('❌ Bloqueado', 'Esta conta está protegida e não pode ser modificada.', 3000);
         }
@@ -341,20 +372,42 @@ window.toggleBlockUser = async (userId, isCurrentlyBlocked) => {
         text: isCurrentlyBlocked 
             ? 'Este utilizador voltará a ter acesso.' 
             : 'Este utilizador não poderá fazer reservas.',
+        input: isCurrentlyBlocked ? undefined : 'textarea',
+        inputLabel: isCurrentlyBlocked ? '' : 'Mensagem obrigatória para o utilizador',
+        inputPlaceholder: isCurrentlyBlocked ? '' : 'Ex: Conta bloqueada por pagamentos pendentes. Contacte a receção.',
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#84cc16',
         cancelButtonColor: '#334155',
         confirmButtonText: 'Confirmar',
-        cancelButtonText: 'Cancelar'
+        cancelButtonText: 'Cancelar',
+        inputValidator: (value) => {
+            if (!isCurrentlyBlocked && !String(value || '').trim()) {
+                return 'Escreve a mensagem que o utilizador vai ver ao tentar reservar.';
+            }
+            return null;
+        }
     });
 
     if (!result.isConfirmed) return;
 
     try {
-        await updateDoc(doc(db, "users", userId), {
-            isBlocked: !isCurrentlyBlocked
-        });
+        if (isCurrentlyBlocked) {
+            await updateDoc(doc(db, "users", userId), {
+                isBlocked: false,
+                blockMessage: '',
+                blockedAt: null,
+                blockedBy: null
+            });
+        } else {
+            const blockMessage = String(result.value || '').trim();
+            await updateDoc(doc(db, "users", userId), {
+                isBlocked: true,
+                blockMessage,
+                blockedAt: new Date(),
+                blockedBy: auth.currentUser?.email || 'admin'
+            });
+        }
 
         if (window.Notification) {
             window.Notification.success('✅ Atualizado', isCurrentlyBlocked ? 'Utilizador desbloqueado.' : 'Utilizador bloqueado.', 3000);
@@ -374,7 +427,7 @@ window.deleteUser = async (userId) => {
     const userDoc = await getDoc(doc(db, "users", userId));
     const userData = userDoc.data();
     
-    if (userData.email === 'lmesteves08@gmail.com') {
+    if (isProtectedAccount(userData.email)) {
         if (window.Notification) {
             window.Notification.error('❌ Bloqueado', 'Esta conta está protegida e não pode ser eliminada.', 3000);
         }
@@ -427,6 +480,21 @@ function generateNumericCode() {
     return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+async function generateUniqueAppLoginCode(maxAttempts = 8) {
+    for (let i = 0; i < maxAttempts; i++) {
+        const candidate = generateNumericCode();
+        const existingQuery = query(collection(db, 'users'), where('appLoginCode', '==', candidate));
+        const existingSnapshot = await getDocs(existingQuery);
+
+        if (existingSnapshot.empty) {
+            return candidate;
+        }
+    }
+
+    // Fallback raro: usa o último código gerado mesmo após colisões repetidas
+    return generateNumericCode();
+}
+
 window.generateAppLoginCode = async (userId) => {
     const userFromList = allUsers.find(u => u.id === userId);
     const userName = userFromList?.name || 'Utilizador';
@@ -446,7 +514,7 @@ window.generateAppLoginCode = async (userId) => {
     if (!result.isConfirmed) return;
 
     try {
-        const code = generateNumericCode();
+        const code = await generateUniqueAppLoginCode();
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
         await updateDoc(doc(db, "users", userId), {
@@ -691,6 +759,7 @@ function renderUserDetails(user, userId) {
     const isAdmin = user.isAdmin === true || user.role === 'admin';
     const isBlocked = user.isBlocked === true;
     const unreadMessages = user.unreadMessages || 0;
+    const totalNoShows = reservas.filter(r => r.noShow === true || r.paymentMethod === 'Não compareci').length;
 
     // HTML com detalhes
     let html = `
@@ -725,6 +794,12 @@ function renderUserDetails(user, userId) {
                     <small class="text-secondary">Mensagens Não Lidas</small>
                     <p class="text-white fw-bold">
                         ${unreadMessages > 0 ? `<span class="badge bg-warning">${unreadMessages}</span>` : '<span class="text-secondary">0</span>'}
+                    </p>
+                </div>
+                <div class="col-md-6 mb-2">
+                    <small class="text-secondary">Faltas (Não Compareceu)</small>
+                    <p class="text-white fw-bold">
+                        <span class="badge ${totalNoShows > 0 ? 'bg-warning text-dark' : 'bg-secondary'}">${totalNoShows}</span>
                     </p>
                 </div>
             </div>
@@ -764,12 +839,16 @@ function renderUserDetails(user, userId) {
                                 }
                                 
                                 const status = r.status || 'Pendente';
-                                const statusColor = status === 'Aprovado' ? 'success' : status === 'Recusado' ? 'danger' : 'warning';
+                                const isNoShow = r.noShow === true || r.paymentMethod === 'Não compareci';
+                                const statusText = isNoShow ? 'Não compareceu' : status;
+                                const statusColor = isNoShow
+                                    ? 'secondary'
+                                    : (status === 'Aprovado' ? 'success' : status === 'Recusado' ? 'danger' : 'warning');
                                 return `
                                     <tr>
                                         <td>${displayDate}</td>
                                         <td>${displayTime}</td>
-                                        <td><span class="badge bg-${statusColor}">${status}</span></td>
+                                        <td><span class="badge bg-${statusColor}">${statusText}</span></td>
                                     </tr>
                                 `;
                             }).join('')}
@@ -784,7 +863,7 @@ function renderUserDetails(user, userId) {
 
         <div>
             <h6 class="text-padel mb-3">⚙️ Ações Rápidas</h6>
-            ${user.email !== 'lmesteves08@gmail.com' ? `
+            ${!isProtectedAccount(user.email) ? `
                 <button class="btn btn-sm btn-outline-warning me-2" onclick="toggleAdminStatus('${userId}', ${isAdmin})">
                     <i class="bi bi-shield-${isAdmin ? 'slash' : 'lock'}"></i> ${isAdmin ? 'Remover Admin' : 'Tornar Admin'}
                 </button>

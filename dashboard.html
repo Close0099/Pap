@@ -209,14 +209,6 @@
                             <span id="price-display" class="fs-4 fw-bold text-padel">--€</span>
                         </div>
 
-                        <!-- Reserva Recorrente -->
-                        <div id="recurring-container" class="mb-3 form-check d-none">
-                            <input type="checkbox" class="form-check-input" id="recurring-checkbox">
-                            <label class="form-check-label text-secondary small" for="recurring-checkbox">
-                                <i class="bi bi-repeat"></i> Repetir semanalmente
-                            </label>
-                        </div>
-
                         <button type="submit" class="btn btn-padel w-100 py-2" id="btn-confirm" disabled>
                             Confirmar Reserva
                         </button>
@@ -434,14 +426,6 @@
                                 <div class="col-7"><span id="summary-price" class="text-padel fs-4 fw-bold">--€</span></div>
                             </div>
                         </div>
-                        <div class="form-check p-3 bg-dark rounded">
-                            <input type="checkbox" class="form-check-input" id="modal-recurring-checkbox">
-                            <label class="form-check-label text-white" for="modal-recurring-checkbox">
-                                <i class="bi bi-repeat me-2"></i>Repetir esta reserva semanalmente
-                            </label>
-                        </div>
-
-
                     </div>
 
                     <!-- Barra de Progresso -->
@@ -487,7 +471,7 @@
         import { auth, db } from './js/core/firebase-config.js';
 
         import { signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { addDoc, collection, query, where, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { addDoc, collection, query, where, getDocs, onSnapshot, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
         
         window.logout = async () => {
             try {
@@ -538,6 +522,8 @@
             const section = urlParams.get('section');
             const action = urlParams.get('action');
 
+            loadPricingSettings();
+
             if (section) {
                 // Map section param to ID and Link Text
                 const sectionMap = {
@@ -577,6 +563,93 @@
             time: '',
             price: 0
         };
+
+        const DEFAULT_PRICING = {
+            courts: {
+                'Campo 1': 20,
+                'Campo 2': 20,
+                'Campo 3': 15
+            },
+            eveningStartHour: 18,
+            eveningSurcharge: 5
+        };
+
+        let pricingSettings = { ...DEFAULT_PRICING, courts: { ...DEFAULT_PRICING.courts } };
+
+        function mergePricingSettings(data = {}) {
+            const courts = data.courts || {};
+            return {
+                courts: {
+                    'Campo 1': Number(courts['Campo 1']) || DEFAULT_PRICING.courts['Campo 1'],
+                    'Campo 2': Number(courts['Campo 2']) || DEFAULT_PRICING.courts['Campo 2'],
+                    'Campo 3': Number(courts['Campo 3']) || DEFAULT_PRICING.courts['Campo 3']
+                },
+                eveningStartHour: Number.isFinite(Number(data.eveningStartHour)) ? Number(data.eveningStartHour) : DEFAULT_PRICING.eveningStartHour,
+                eveningSurcharge: Number.isFinite(Number(data.eveningSurcharge)) ? Number(data.eveningSurcharge) : DEFAULT_PRICING.eveningSurcharge
+            };
+        }
+
+        async function loadPricingSettings() {
+            try {
+                const pricingDoc = await getDoc(doc(db, 'settings', 'pricing'));
+                if (pricingDoc.exists()) {
+                    pricingSettings = mergePricingSettings(pricingDoc.data());
+                }
+            } catch (error) {
+                console.error('Erro ao carregar preços do modal. A usar padrão.', error);
+            }
+        }
+
+        function calculateBookingPrice(court, time) {
+            const hour = Number((time || '00:00').split(':')[0]);
+            const base = Number(pricingSettings.courts[court] || 0);
+            const surcharge = hour >= Number(pricingSettings.eveningStartHour) ? Number(pricingSettings.eveningSurcharge || 0) : 0;
+            return base + surcharge;
+        }
+
+        async function logClientActivity(action, details, meta = {}) {
+            try {
+                if (!auth.currentUser) return;
+
+                const userSnap = await getDoc(doc(db, 'users', auth.currentUser.uid));
+                const userData = userSnap.exists() ? userSnap.data() : {};
+                const actorName = userData.name || auth.currentUser.email?.split('@')[0] || 'Cliente';
+                const actorIsAdmin = userData.isAdmin === true || userData.role === 'admin';
+
+                await addDoc(collection(db, 'activityLogs'), {
+                    action,
+                    details: details || '',
+                    targetType: meta.targetType || '',
+                    targetId: meta.targetId || '',
+                    actorId: auth.currentUser.uid,
+                    actorEmail: auth.currentUser.email || '',
+                    actorName,
+                    actorRole: actorIsAdmin ? 'admin' : 'client',
+                    actorIsAdmin,
+                    source: 'client-dashboard-modal',
+                    timestamp: new Date()
+                });
+            } catch (error) {
+                console.error('Falha ao gravar log do cliente (modal):', error);
+            }
+        }
+
+        async function getCurrentUserBlockStateModal() {
+            if (!auth.currentUser?.uid) {
+                return { isBlocked: false, message: '' };
+            }
+
+            const userSnap = await getDoc(doc(db, 'users', auth.currentUser.uid));
+            if (!userSnap.exists()) {
+                return { isBlocked: false, message: '' };
+            }
+
+            const userData = userSnap.data() || {};
+            return {
+                isBlocked: userData.isBlocked === true,
+                message: String(userData.blockMessage || '').trim()
+            };
+        }
 
         // Inicializar Flatpickr no modal
         let datePickerInstance = null;
@@ -712,15 +785,38 @@
                 console.log(`[loadModalTimeSlots] Renderizando ${slots.length} slots, ${reservedSlots.length} reservados`);
                 
                 container.innerHTML = '';
+
+                // Verificar se a data selecionada é hoje
+                const now = new Date();
+                const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                const isToday = modalData.date === todayStr;
                 
                 slots.forEach(time => {
                     const isReserved = reservedSlots.includes(time);
+
+                    // Bloquear horários que já passaram (se for hoje)
+                    let isPast = false;
+                    if (isToday) {
+                        const [h, m] = time.split(':').map(Number);
+                        const slotDate = new Date();
+                        slotDate.setHours(h, m, 0, 0);
+                        const limit = new Date(now.getTime() + 30 * 60 * 1000);
+                        if (slotDate <= limit) isPast = true;
+                    }
+
+                    const isDisabled = isReserved || isPast;
                     const btn = document.createElement('button');
                     btn.type = 'button';
-                    btn.className = isReserved ? 'btn btn-secondary' : 'btn btn-outline-light';
+                    btn.className = isDisabled ? 'btn btn-secondary' : 'btn btn-outline-light';
                     btn.textContent = time;
-                    btn.disabled = isReserved;
-                    if (!isReserved) {
+                    btn.disabled = isDisabled;
+                    if (isPast && !isReserved) {
+                        btn.style.opacity = '0.5';
+                        btn.style.backgroundColor = '#343a40';
+                        btn.style.borderColor = '#343a40';
+                        btn.title = 'Horário já passou';
+                    }
+                    if (!isDisabled) {
                         btn.onclick = () => selectTimeModal(btn, time);
                     }
                     container.appendChild(btn);
@@ -784,12 +880,8 @@
             });
             element.classList.add('active', 'bg-padel', 'text-black', 'border-0');
             modalData.time = time;
-            
-            // Calcular preço
-            let price = 20;
-            if (modalData.court === 'Campo 3') price = 15;
-            if (parseInt(time.split(':')[0]) >= 18) price += 5;
-            modalData.price = price;
+
+            modalData.price = calculateBookingPrice(modalData.court, time);
         };
 
         function showSummary() {
@@ -800,28 +892,94 @@
             document.getElementById('summary-price').textContent = modalData.price + '€';
         }
 
+        async function sendTelegramBookingNotification(payload = {}) {
+            const botToken = window.APP_TELEGRAM_BOT_TOKEN || '';
+            const chatId = window.APP_TELEGRAM_CHAT_ID || '';
+
+            if (!botToken || !chatId) return;
+
+            const adminUrl = `${window.location.origin}/admin-dashboard.html`;
+
+            const message = [
+                'Nova reserva recebida',
+                `Campo: ${payload.courtId || '-'}`,
+                `Data/Hora: ${payload.datetime || '-'}`,
+                `Preco: ${Number(payload.price || 0)} EUR`,
+                `Cliente: ${payload.userEmail || '-'}`,
+                `Origem: ${payload.origin || 'dashboard-modal'}`,
+                `Admin: ${adminUrl}`
+            ].join('\n');
+
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+                const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    signal: controller.signal,
+                    body: JSON.stringify({
+                        chat_id: chatId,
+                        text: message
+                    })
+                });
+
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    const body = await response.text();
+                    throw new Error(`Telegram HTTP ${response.status}: ${body}`);
+                }
+            } catch (error) {
+                console.warn('Falha ao enviar notificação Telegram:', error);
+            }
+        }
+
         window.confirmBookingModal = async () => {
             try {
                 if (!auth.currentUser) {
                     throw new Error("Utilizador não autenticado. Por favor, faz login novamente.");
                 }
 
-                const recurring = document.getElementById('modal-recurring-checkbox').checked;
-                
+                const blockState = await getCurrentUserBlockStateModal();
+                if (blockState.isBlocked) {
+                    const adminMessage = blockState.message || 'A tua conta encontra-se bloqueada. Contacta o administrador para mais detalhes.';
+                    await Swal.fire({
+                        icon: 'warning',
+                        title: 'Conta bloqueada',
+                        html: `<p>${adminMessage}</p>`
+                    });
+                    return;
+                }
+
                 // Construir datetime final
                 const finalDateTime = `${modalData.date}T${modalData.time}`;
                 
                 // Salvar no Firestore
-                await addDoc(collection(db, "reservas"), {
+                const reservationRef = await addDoc(collection(db, "reservas"), {
                     userId: auth.currentUser.uid,
                     userEmail: auth.currentUser.email,
                     datetime: finalDateTime,
                     courtId: modalData.court,
                     price: modalData.price,
                     status: "Pendente",
-                    recurring: recurring,
                     timestamp: new Date()
                 });
+
+                await sendTelegramBookingNotification({
+                    bookingId: reservationRef.id,
+                    userEmail: auth.currentUser.email,
+                    datetime: finalDateTime,
+                    courtId: modalData.court,
+                    price: modalData.price,
+                    origin: 'dashboard-modal'
+                });
+
+                await logClientActivity(
+                    'Criou reserva (modal)',
+                    `${modalData.court} em ${finalDateTime} (${modalData.price}EUR)`,
+                    { targetType: 'reserva', targetId: finalDateTime }
+                );
 
                 Swal.fire({
                     icon: 'success',

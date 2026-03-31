@@ -245,47 +245,63 @@
                     return;
                 }
 
-                const userDocSnapshot = querySnapshot.docs[0];
-                const userData = userDocSnapshot.data();
-                const userId = userDocSnapshot.id;
-
-                // Verificar se já foi utilizado
-                if (userData.appLoginCodeUsed === true) {
-                    showError('❌ Este código já foi utilizado');
-                    btn.disabled = false;
-                    btnText.textContent = 'Entrar';
-                    btnSpinner.style.display = 'none';
-                    return;
+                function resolveExpiresAt(value) {
+                    if (!value) return new Date(0);
+                    if (value?.seconds) return new Date(value.seconds * 1000);
+                    if (typeof value?.toDate === 'function') return value.toDate();
+                    if (typeof value === 'string') return new Date(value);
+                    if (value instanceof Date) return value;
+                    return new Date(0);
                 }
 
-                // Verificar se não expirou
-                let expiresAt = new Date();
-                if (userData.appLoginCodeExpiresAt) {
-                    if (userData.appLoginCodeExpiresAt.seconds) {
-                        expiresAt = new Date(userData.appLoginCodeExpiresAt.seconds * 1000);
-                    } else if (typeof userData.appLoginCodeExpiresAt === 'string') {
-                        expiresAt = new Date(userData.appLoginCodeExpiresAt);
-                    } else {
-                        expiresAt = userData.appLoginCodeExpiresAt;
+                const now = new Date();
+                let selectedUserDoc = null;
+                let hasUsed = false;
+                let hasExpired = false;
+                let hasBlocked = false;
+
+                for (const docSnap of querySnapshot.docs) {
+                    const data = docSnap.data();
+
+                    if (data.isBlocked === true) {
+                        hasBlocked = true;
+                        continue;
                     }
+
+                    if (data.appLoginCodeUsed === true) {
+                        hasUsed = true;
+                        continue;
+                    }
+
+                    const expiresAt = resolveExpiresAt(data.appLoginCodeExpiresAt);
+                    if (Number.isNaN(expiresAt.getTime()) || now > expiresAt) {
+                        hasExpired = true;
+                        continue;
+                    }
+
+                    selectedUserDoc = docSnap;
+                    break;
                 }
 
-                if (new Date() > expiresAt) {
-                    showError('❌ Código expirado. Peça um novo código ao administrador');
+                if (!selectedUserDoc) {
+                    if (hasBlocked) {
+                        showError('❌ A sua conta foi bloqueada. Contacte o administrador');
+                    } else if (hasUsed) {
+                        showError('❌ Este código já foi utilizado');
+                    } else if (hasExpired) {
+                        showError('❌ Código expirado. Peça um novo código ao administrador');
+                    } else {
+                        showError('❌ Código inválido ou expirado');
+                    }
+
                     btn.disabled = false;
                     btnText.textContent = 'Entrar';
                     btnSpinner.style.display = 'none';
                     return;
                 }
 
-                // Verificar se o utilizador não está bloqueado
-                if (userData.isBlocked === true) {
-                    showError('❌ A sua conta foi bloqueada. Contacte o administrador');
-                    btn.disabled = false;
-                    btnText.textContent = 'Entrar';
-                    btnSpinner.style.display = 'none';
-                    return;
-                }
+                const userData = selectedUserDoc.data();
+                const userId = selectedUserDoc.id;
 
                 // Gerar token de sessão único
                 const sessionToken = generateSessionToken();
