@@ -1,0 +1,12 @@
+{
+  "name": "telegram-reports-job",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "send:daily": "node send-daily-report.mjs"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0"
+  }
+}
